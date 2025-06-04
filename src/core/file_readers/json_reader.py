@@ -1,16 +1,12 @@
 from .interfaces.file_reader import ObjectReaderInterface
+import pandas as pd
+import dask.dataframe as dd
 
 class JSONReader(ObjectReaderInterface):
     def read(self, data: object) -> list:
         try:
-            print("Reading JSON data")
-            # Assuming 'data' is a JSON string or a dictionary
-            if isinstance(data, str):
-                import json
-                return json.loads(data)
-            elif isinstance(data, dict):
-                return [data]
-            else:
-                raise ValueError("Invalid data format for JSONReader")
+            pdf = pd.DataFrame(data)
+            df = dd.from_pandas(pdf, npartitions=1)
+            return df
         except Exception as e:
             raise ValueError(f"Error reading JSON data: {e}")
