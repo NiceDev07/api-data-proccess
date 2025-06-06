@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     PORT: int = 8000
     HOST: str = "localhost"
     REPOSITORY_FILES_DIR: str = "/"
+    DB_SAEM3: str = "mysql+mysqlconnector://user:pass@host:port/database"
 
     model_config = SettingsConfigDict(
         env_file=".env",
