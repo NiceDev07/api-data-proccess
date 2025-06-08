@@ -1,9 +1,7 @@
-class TariffRepositoryInterface:
-    """
-    Interface for Tariff Repository.
-    This interface defines the methods that a Tariff Repository should implement.
-    """
+from ..entities.tariff import Tariff
+from typing import Optional
 
-    def get_tariff(self, country_id: int, tariff_id: int, service: str) -> dict:
+class TariffRepositoryInterface:
+    def get_tariff(self, country_id: int, tariff_id: int, service: str) -> Optional[Tariff]:
         pass
         

@@ -6,6 +6,9 @@ class RedisCache(CacheInterface):
     def __init__(self, client: Redis):
         self.client = client
 
+    def ping(self):
+        return self.client.ping()
+
     def get(self, key: str):
         raw = self.client.get(key)
         return json.loads(raw) if raw else None

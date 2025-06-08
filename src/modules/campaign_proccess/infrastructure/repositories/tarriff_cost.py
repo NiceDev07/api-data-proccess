@@ -2,7 +2,8 @@ from modules.campaign_proccess.domain.interfaces.tariff_repository import Tariff
 from core.cache.interfaces.cache_interface import CacheInterface
 from core.db.interfaces.database import DatabaseSessionInterface
 from logging import Logger, getLogger
-
+from modules.campaign_proccess.domain.entities.tariff import Tariff
+from typing import Optional
 
 class TariffRepository(TariffRepositoryInterface):
     def __init__(self, db: DatabaseSessionInterface, cache: CacheInterface, logger: Logger = None):
@@ -10,7 +11,7 @@ class TariffRepository(TariffRepositoryInterface):
         self.cache = cache
         self.logger = logger or getLogger(__name__)
 
-    def get_tariff(self, country_id: int, tariff_id: int, service: str) -> dict:
+    def get_tariff(self, country_id: int, tariff_id: int, service: str) -> Optional[Tariff]:
         key = f"tariff:{tariff_id}:{country_id}:{service}"
         updated_at = self.get_updated_at(tariff_id)
         cache_data = self.get_cache(key, update_at=updated_at)
