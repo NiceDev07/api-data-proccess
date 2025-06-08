@@ -6,6 +6,7 @@ from src.core.logger.logger_adapter import LoggerAdapter
 from src.core.db.mysql_adapter import SQLAlchemyAdapter
 from src.core.cache.redis_adapter import RedisCache
 from typing import Literal
+from ..repositories.tarriff_cost import TariffRepository
 
 router = APIRouter()
 logger = LoggerAdapter("PreloadCampaigns")
@@ -14,14 +15,21 @@ logger = LoggerAdapter("PreloadCampaigns")
 async def preload_campaigns(
     service: Literal["sms", "email", "call_blasting"],
     payload: MainModel,
-    db: Depends = Depends(get_mysql_db),
+    saem3_db: Depends = Depends(get_mysql_db),
     cache: Depends = Depends(get_redis_client)
 ):
     logger.info(f"Preloading campaigns for service: {service} with payload: {payload.content}")
-    db_mysql = SQLAlchemyAdapter(db)
-    redis = RedisCache(cache)
-   
+    tariffRepo = TariffRepository(
+        db=SQLAlchemyAdapter(saem3_db),
+        cache=RedisCache(cache),
+        logger=logger
+    )
 
+    result = tariffRepo.get_tariff(
+        country_id=1,
+        tariff_id=1,
+        service=service
+    )
 
     # Logic to preload campaigns goes here
-    return {"campaign_id": 200}
+    return {"campaign_id": 200, "result": result}

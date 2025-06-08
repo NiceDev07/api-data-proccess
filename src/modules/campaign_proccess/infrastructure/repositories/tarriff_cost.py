@@ -1,9 +1,9 @@
-from modules.campaign_proccess.domain.interfaces.tariff_repository import TariffRepositoryInterface
-from core.cache.interfaces.cache_interface import CacheInterface
-from core.db.interfaces.database import DatabaseSessionInterface
 from logging import Logger, getLogger
-from modules.campaign_proccess.domain.entities.tariff import Tariff
 from typing import Optional
+from src.modules.campaign_proccess.domain.interfaces.tariff_repository import TariffRepositoryInterface
+from src.core.cache.interfaces.cache_interface import CacheInterface
+from src.core.db.interfaces.database import DatabaseSessionInterface
+from src.modules.campaign_proccess.domain.entities.tariff import Tariff
 
 class TariffRepository(TariffRepositoryInterface):
     def __init__(self, db: DatabaseSessionInterface, cache: CacheInterface, logger: Logger = None):
@@ -30,11 +30,11 @@ class TariffRepository(TariffRepositoryInterface):
             self.logger.error(f"Error fetching updated_at for tariff_id {tariff_id} Table w48fa_tariffs: {e}")
             return None
 
-    def get_cache(self, key:str, update_at):
+    def get_cache(self, key:str, update_at: str = None):
         cached_data = self.cache.get(key)
         if not cached_data:
             return None
-
+        
         update_at_cache = cached_data.get("date_cache")
 
         if update_at == update_at_cache:

@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     HOST: str = "localhost"
     REPOSITORY_FILES_DIR: str = "/"
     DB_SAEM3: str = "mysql+mysqlconnector://user:pass@host:port/database"
+    DB_PORTABILIDAD: str = "mysql+mysqlconnector://user:pass@host:port/database"
 
     model_config = SettingsConfigDict(
         env_file=".env",

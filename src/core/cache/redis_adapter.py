@@ -11,7 +11,15 @@ class RedisCache(CacheInterface):
 
     def get(self, key: str):
         raw = self.client.get(key)
-        return json.loads(raw) if raw else None
+        if not raw:
+            return None  # Si no hay datos, devuelve None
+
+        try:
+            # Intentar decodificar como JSON
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            # Si no es JSON, devolver el texto plano
+            return raw if isinstance(raw, bytes) else raw
 
     def set(self, key: str, value, ttl: int = 3600):
         self.client.setex(key, ttl, json.dumps(value))
