@@ -1,12 +1,11 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
+from config import settings
 
 # Base común si compartes modelos (opcional)
 Base = declarative_base()
 
-# --- MySQL DB (e.g. tarifas) ---
-MYSQL_DATABASE_URL = "mysql+pymysql://jguzman:Jguzman/0922@192.168.0.33:3306/saem3"
-mysql_engine = create_engine(MYSQL_DATABASE_URL)
+mysql_engine = create_engine(settings.DB_SAEM3)
 MySQLSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=mysql_engine)
 
 def get_mysql_db():

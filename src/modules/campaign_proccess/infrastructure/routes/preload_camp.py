@@ -1,10 +1,11 @@
 from fastapi import APIRouter, Depends
 from ..schemas.preload_camp_schema import MainModel
-from src.core.db.mysql import get_mysql_db
-from src.core.cache.redis import get_redis_client
-from sqlalchemy import text
+from core.db.mysql_connect import get_mysql_db
+from core.cache.redis_connect import get_redis_client
+from core.logger.logger_adapter import LoggerAdapter
 
 router = APIRouter()
+logger = LoggerAdapter("PreloadCampaigns")
 
 @router.post("/preload_campaigns/{service}")
 async def preload_campaigns(
