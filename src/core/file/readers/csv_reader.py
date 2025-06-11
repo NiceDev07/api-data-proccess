@@ -1,10 +1,9 @@
-from .interfaces.file_reader import FileReaderInterface
+from ..interfaces.file_reader import FileReaderInterface
 import dask.dataframe as dd
 
 class CSVReader(FileReaderInterface):
     def read(self, filepath: str, usecols=None, nrows=None) -> dd.DataFrame:
         try:
-            print(f"Reading CSV file from: {filepath}")
             df = dd.read_csv(filepath, usecols=usecols, blocksize="64MB")  # ajusta blocksize según tus recursos
 
             if nrows:

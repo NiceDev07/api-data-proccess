@@ -1,4 +1,4 @@
-from core.file_readers.factory import FileReaderFactory
+from core.file.readers.factory import FileReaderFactory
 from modules.campaign_proccess.domain.interfaces.proccess import ProcessorInterface
 from modules.campaign_proccess.domain.services.sms.sms_base_proccessor import SMSInformativoProcessor
 
@@ -25,13 +25,13 @@ class SMSCampaignProcessorUseCase:
         return processor.process(df)
 
 
-use_case = SMSCampaignProcessorUseCase()
+# use_case = SMSCampaignProcessorUseCase()
 
-df = use_case.execute(
-    filepath="/home/esteban/saem/refactors/api-data-proccess/sms_campaign_file.csv",
-    regulation={"some": "regulation"},
-    user_level=1,
-    subservice="informative"
-)
+# df = use_case.execute(
+#     filepath="/home/esteban/saem/refactors/api-data-proccess/sms_campaign_file.csv",
+#     regulation={"some": "regulation"},
+#     user_level=1,
+#     subservice="informative"
+# )
 
-print(df.head())  # Imprime las primeras filas del DataFrame procesado
+# print(df.head())  # Imprime las primeras filas del DataFrame procesado

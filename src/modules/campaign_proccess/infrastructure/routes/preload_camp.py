@@ -21,17 +21,5 @@ async def preload_campaigns(
 ):
     logger.info(f"Preloading campaigns for service: {service} with payload: {payload.content}")
 
-    tariffRepo = TariffRepository(
-        db=SQLAlchemyAdapter(saem3_db),
-        cache=RedisCache(cache),
-        logger=logger
-    )
-
-    result = tariffRepo.get_tariff(
-        country_id=1,
-        tariff_id=1,
-        service=service
-    )
-
     # Logic to preload campaigns goes here
-    return {"campaign_id": 200, "result": result}
+    return {"campaign_id": 200}

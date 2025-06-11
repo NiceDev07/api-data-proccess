@@ -1,4 +1,4 @@
-from .interfaces.file_reader import FileReaderInterface
+from ..interfaces.file_reader import FileReaderInterface
 from .csv_reader import CSVReader
 from .json_reader import JSONReader
 

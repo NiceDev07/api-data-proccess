@@ -1,3 +1,6 @@
+from dataclasses import dataclass
+
+@dataclass
 class Numeracion:
     company: str
     type: str

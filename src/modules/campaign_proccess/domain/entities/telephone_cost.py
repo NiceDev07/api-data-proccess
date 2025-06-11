@@ -1,9 +1,11 @@
 from enum import Enum
+from dataclasses import dataclass
 
 class TypeEnum(Enum):
     MOBILE = "mobile"
     FIXED = "fixed"
 
+@dataclass
 class TelephoneCosts:
     type: TypeEnum
     prefix: str
