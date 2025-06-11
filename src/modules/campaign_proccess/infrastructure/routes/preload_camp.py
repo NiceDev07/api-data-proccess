@@ -9,6 +9,7 @@ from typing import Literal
 from ..repositories.tarriff_cost import TariffRepository
 
 router = APIRouter()
+
 logger = LoggerAdapter("PreloadCampaigns")
 
 @router.post("/preload_campaigns/{service}")
@@ -19,6 +20,7 @@ async def preload_campaigns(
     cache: Depends = Depends(get_redis_client)
 ):
     logger.info(f"Preloading campaigns for service: {service} with payload: {payload.content}")
+
     tariffRepo = TariffRepository(
         db=SQLAlchemyAdapter(saem3_db),
         cache=RedisCache(cache),
