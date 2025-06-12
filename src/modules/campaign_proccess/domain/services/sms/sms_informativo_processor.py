@@ -1,5 +1,5 @@
 import dask.dataframe as dd
-from src.modules.campaign_proccess.domain.interfaces.proccess import ProcessorInterface
+from modules.campaign_proccess.domain.interfaces.proccess import ProcessorInterface
 
 class SMSInformativoProcessor(ProcessorInterface):
     def __init__(self, regulation: dict):

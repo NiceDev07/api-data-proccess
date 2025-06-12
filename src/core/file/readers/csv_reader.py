@@ -5,7 +5,6 @@ class CSVReader(FileReaderInterface):
     def read(self, filepath: str, usecols=None, nrows=None) -> dd.DataFrame:
         try:
             df = dd.read_csv(filepath, usecols=usecols, blocksize="64MB")  # ajusta blocksize según tus recursos
-
             if nrows:
                 df = df.head(nrows, compute=True)  # Esto devuelve un pandas.DataFrame si usas head()
 

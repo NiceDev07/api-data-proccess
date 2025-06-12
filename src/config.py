@@ -6,7 +6,7 @@ class EnvironmentEnum(Enum):
         prod = "prod"
 
 class Settings(BaseSettings):
-    ENV: EnvironmentEnum = EnvironmentEnum.dev
+    ENV: EnvironmentEnum = EnvironmentEnum.dev.value
     PORT: int = 8000
     HOST: str = "localhost"
     REPOSITORY_FILES_DIR: str = "/"

@@ -61,7 +61,7 @@ class InfoUserValidSend(BaseModel):
     demographic: str
 
 
-class MainModel(BaseModel):
+class PreloadCampDTO(BaseModel):
     content: str
     shortname: str
     tariffId: int

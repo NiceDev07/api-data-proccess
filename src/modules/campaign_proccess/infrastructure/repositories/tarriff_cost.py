@@ -1,9 +1,9 @@
 from logging import Logger, getLogger
 from typing import Optional
-from src.modules.campaign_proccess.domain.interfaces.tariff_repository import TariffRepositoryInterface
-from src.core.cache.interfaces.cache_interface import CacheInterface
-from src.core.db.interfaces.database import DatabaseSessionInterface
-from src.modules.campaign_proccess.domain.entities.tariff import Tariff
+from modules.campaign_proccess.domain.interfaces.tariff_repository import TariffRepositoryInterface
+from core.cache.interfaces.cache_interface import CacheInterface
+from core.db.interfaces.database import DatabaseSessionInterface
+from modules.campaign_proccess.domain.entities.tariff import Tariff
 
 class TariffRepository(TariffRepositoryInterface):
     def __init__(self, db: DatabaseSessionInterface, cache: CacheInterface, logger: Logger = None):
