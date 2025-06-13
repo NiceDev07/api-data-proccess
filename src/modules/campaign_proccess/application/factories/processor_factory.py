@@ -11,10 +11,8 @@ from ..interfaces.preload_processor_interface import PreloadCampaignUseCaseInter
 # application/factory/processor_factory.py
 
 class CampaignProcessorFactory:
-    def __init__(self, db, cache, sms_db=None):
-        self.db = db
-        self.cache = cache
-        self.sms_db = sms_db or db
+    def __init__(self, ):
+        pass
 
         self._register: dict[str, Callable[[], PreloadCampaignUseCaseInterface]] = {
             "sms": self._build_sms_processor,
@@ -24,12 +22,7 @@ class CampaignProcessorFactory:
         }
 
     def _build_sms_processor(self):
-        return SMSUseCase(
-            file_validator=LocalFileValidator(),
-            file_reader=CSVReader(),
-            blacklist_cache=RedisCache(self.cache),
-            db=self.sms_db
-        )
+        return SMSUseCase()
 
     # def _build_email_processor(self):
     #     return EmailCampaignProcessorUseCase(
