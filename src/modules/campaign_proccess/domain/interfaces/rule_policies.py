@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from modules.campaign_proccess.domain.entities.rules_country import RulesCountry
+from modules.campaign_proccess.domain.value_objects.rules_country import RulesCountry
 
 class ICountryRulePolicy(ABC):
     @abstractmethod

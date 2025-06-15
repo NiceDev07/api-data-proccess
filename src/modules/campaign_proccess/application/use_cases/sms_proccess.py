@@ -2,7 +2,7 @@ from core.file.interfaces.file_reader import IFileReader
 from modules.campaign_proccess.application.schemas.preload_camp_schema import PreloadCampDTO
 from modules.campaign_proccess.application.helpers.tags import extract_tags_from_content
 from modules.campaign_proccess.application.helpers.required_columns import build_required_columns
-from modules.campaign_proccess.domain.entities.rules_country import RulesCountry
+from modules.campaign_proccess.domain.value_objects.rules_country import RulesCountry
 from modules.campaign_proccess.domain.policies.composition import CompositeCountryValidator
 from modules.campaign_proccess.domain.policies.validate_policies import (CharacterSpecialPolicy, CharacterLimitPolicy)
 

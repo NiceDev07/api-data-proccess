@@ -1,6 +1,6 @@
 from typing import List
 from ..interfaces.rule_policies import ICountryRulePolicy
-from ..entities.rules_country import RulesCountry
+from ..value_objects.rules_country import RulesCountry
 
 class CompositeCountryValidator(ICountryRulePolicy):
     def __init__(self, validators: List[ICountryRulePolicy]):
