@@ -1,7 +1,7 @@
-from ..interfaces.file_reader import FileReaderInterface
+from ..interfaces.file_reader import IFileReader
 import dask.dataframe as dd
 
-class CSVReader(FileReaderInterface):
+class CSVReader(IFileReader):
     def __init__(self, sep: str = ";", header: bool = True):
         self.sep = sep
         self.header = header
@@ -16,3 +16,6 @@ class CSVReader(FileReaderInterface):
             raise ValueError(f"Value error while reading CSV file: {str(e)}. Please check the CSV format and provided parameters.")
         except Exception as e:
             raise RuntimeError(f"Unexpected error while reading CSV file: {str(e)}")
+
+
+# Register the readers

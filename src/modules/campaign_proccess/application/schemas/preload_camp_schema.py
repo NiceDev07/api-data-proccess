@@ -2,37 +2,37 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 # NO APLICA
-class Cost(BaseModel):
-    subService: str
-    value: int
+# class Cost(BaseModel):
+#     subService: str
+#     value: int
 
 # NO APLICA
-class Operator(BaseModel):
-    name: str
-    cost: List[Cost]
-    prefix: str
+# class Operator(BaseModel):
+#     name: str
+#     cost: List[Cost]
+#     prefix: str
 
 # NO APLICA
-class ListCostService(BaseModel):
-    type: str
-    operator: List[Operator]
+# class ListCostService(BaseModel):
+#     type: str
+#     operator: List[Operator]
 
 # No APLICA
-class PrefixItem(BaseModel):
-    type: str
-    prefix: List[str]
+# class PrefixItem(BaseModel):
+#     type: str
+#     prefix: List[str]
 
 # SI APLICA
 class RulesCountry(BaseModel):
     idCountry: int
     codeCountry: int
-    prefix: List[PrefixItem] # YA NO APLICA
+    # prefix: List[PrefixItem] # YA NO APLICA
     useCharacterSpecial: bool
     limitCharacter: int
     limitCharacterSpecial: int
     numberDigitsMobile: int
     numberDigitsFixed: int
-    listCostService: List[ListCostService] # YA NO APLICA
+    # listCostService: List[ListCostService] # YA NO APLICA
     useShortName: bool
 
 
@@ -72,5 +72,5 @@ class PreloadCampDTO(BaseModel):
     subService: str
     rulesCountry: RulesCountry
     infoUserValidSend: InfoUserValidSend
-    listBlockTerms: List[str] # YA DEBERIA APLICAR
-    listExclusionGeneral: List[str] # Ya no DBERIA APLICAR
+    # listBlockTerms: List[str] # YA DEBERIA APLICAR
+    # listExclusionGeneral: List[str] # Ya no DBERIA APLICAR

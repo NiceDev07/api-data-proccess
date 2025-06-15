@@ -1,31 +1,25 @@
 from fastapi import APIRouter, Depends
 from typing import Literal
 from modules.campaign_proccess.application.schemas.preload_camp_schema import PreloadCampDTO
-from core.db.mysql_connect import get_db_saem3
+from core.db.connection import get_db_saem3
 from core.cache.redis_connect import get_redis_client
-from core.file.validators.local_file_validator import LocalFileValidator
-from core.file.readers.csv_reader import CSVReader
-from core.logger.logger_adapter import LoggerAdapter
+from core.file.file_reader import FileReader
 from modules.campaign_proccess.application.use_cases.sms_proccess import SMSUseCase
 from fastapi.responses import JSONResponse
-router = APIRouter()
+from modules.campaign_proccess.application.factories.use_case_factorie import UseCaseFactory
 
-logger = LoggerAdapter("PreloadCampaigns")
+router = APIRouter()
 
 @router.post("/preload_campaigns/{service}")
 async def preload_campaigns(
-    service: Literal["sms", "email", "call_blasting"],
+    service: Literal["sms", "email", "call_blasting", "api_call"],
     payload: PreloadCampDTO,
     saem3_db: Depends = Depends(get_db_saem3),
     cache: Depends = Depends(get_redis_client)
 ):
-    
-    use_case = SMSUseCase(
-        file_validator=LocalFileValidator(),
-        file_reader=CSVReader(payload.configFile.delimiter, payload.configFile.useHeaders)
-    )
     try:
-        return use_case.execute(payload)
+        use_case = UseCaseFactory.create(service, payload, saem3_db, cache)
+        return use_case.execute(payload) 
     except FileNotFoundError as e:
         return JSONResponse(
             status_code=404,
