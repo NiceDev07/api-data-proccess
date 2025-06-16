@@ -1,12 +1,12 @@
 from logging import Logger, getLogger
 from typing import Optional
 from modules.campaign_proccess.domain.interfaces.tariff_repository import ITariffRepository
-from modules.campaign_proccess.domain.interfaces.cache_interface import CacheInterface
+from modules.campaign_proccess.domain.interfaces.cache_interface import ICache
 from modules.campaign_proccess.domain.entities.tariff import Tariff
 from sqlalchemy.orm import Session
 
 class SQLAlchemyTariffRepository(ITariffRepository):
-    def __init__(self, db: Session, cache: CacheInterface, logger: Logger = None):
+    def __init__(self, db: Session, cache: ICache, logger: Logger = None):
         self.db = db
         self.cache = cache
         self.logger = logger or getLogger(__name__)

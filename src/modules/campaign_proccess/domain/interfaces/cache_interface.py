@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional, Any
 
-class CacheInterface(ABC):
+class ICache(ABC):
     @abstractmethod
     def get(self, key: str) -> Optional[Any]:
         pass

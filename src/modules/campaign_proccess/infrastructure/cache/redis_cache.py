@@ -1,8 +1,8 @@
 import json
 from redis import Redis
-from .interfaces.cache_interface import CacheInterface
+from modules.campaign_proccess.domain.interfaces.cache_interface import ICache
 
-class RedisCache(CacheInterface):
+class RedisCache(ICache):
     def __init__(self, client: Redis):
         self.client = client
 

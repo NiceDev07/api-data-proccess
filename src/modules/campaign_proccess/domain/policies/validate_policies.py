@@ -1,6 +1,5 @@
 from modules.campaign_proccess.domain.interfaces.rule_policies import ICountryRulePolicy
 from modules.campaign_proccess.domain.value_objects.rules_country import RulesCountry
-from dask.dataframe import DataFrame as dd
 
 class CharacterSpecialPolicy(ICountryRulePolicy):
     def validate(self, content: str, rules: RulesCountry) -> bool:
