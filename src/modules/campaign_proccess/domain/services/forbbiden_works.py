@@ -6,7 +6,7 @@ from modules.campaign_proccess.domain.validators.forbidden_validator import Forb
 
 class ForbiddenWordsService:
     CACHE_KEY = "forbidden_words:v1"
-    TTL_SECONDS = 3600
+    TTL_SECONDS = 3600 * 24
 
     def __init__(
         self,
@@ -40,4 +40,4 @@ class ForbiddenWordsService:
     def ensure_message_is_valid(self, message: str, user_id: int):
         """Lanza excepción si el mensaje no es válido."""
         if not self.validate_message(message, user_id):
-            raise ValueError("El mensaje contiene palabras no autorizadas.")
+            raise ValueError(f"El Contenido base contiene palabras no autorizadas. {message}")

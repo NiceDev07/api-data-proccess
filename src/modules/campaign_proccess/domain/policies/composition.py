@@ -16,3 +16,7 @@ class CompositeCountryValidator(ICountryRulePolicy):
     
     def error_message(self) -> str:
         return "\n".join(self._errors)
+    
+    def ensure_valid(self, content: str, rules: RulesCountry):
+        if not self.validate(content, rules):
+            raise ValueError(self.error_message())

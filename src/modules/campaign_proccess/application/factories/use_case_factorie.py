@@ -1,5 +1,5 @@
-from .base_use_case_builder import IUseCaseBuilder
-from .sms_use_case_builder import SMSUseCaseBuilder
+from ..builders.base_use_case_builder import IUseCaseBuilder
+from ..builders.sms_use_case_builder import SMSUseCaseBuilder
 
 class UseCaseFactory:
     _builders: dict[str, type[IUseCaseBuilder]] = {}
