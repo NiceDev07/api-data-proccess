@@ -1,19 +1,23 @@
+import dask.dataframe as dd
+import time
 from modules.campaign_proccess.application.schemas.preload_camp_schema import PreloadCampDTO
 from modules.campaign_proccess.domain.policies.composition import CompositeCountryValidator
 from modules.campaign_proccess.domain.policies.validate_policies import (CharacterSpecialPolicy, CharacterLimitPolicy)
 from modules.campaign_proccess.domain.services.forbbiden_works import ForbiddenWordsService
 from modules.campaign_proccess.application.factories.rules_country import RulesCountryFactory
 from modules.campaign_proccess.application.services.dataframe_preprocessor import DataFramePreprocessor
-import dask.dataframe as dd
+from modules.campaign_proccess.domain.interfaces.black_list_crc_repository import IBlackListCRCRepository
 
 class SMSUseCase:
     def __init__(
         self,
         df_processor: DataFramePreprocessor,
-        forbidden_service: ForbiddenWordsService
+        forbidden_service: ForbiddenWordsService,
+        blacklist_crc_repo: IBlackListCRCRepository
     ):
         self.df_processor = df_processor
         self.forbidden_service = forbidden_service
+        self.blacklist_crc_repo = blacklist_crc_repo
 
     def execute(self, payload: PreloadCampDTO):
         rules_country = RulesCountryFactory.from_dto(payload.rulesCountry)
@@ -32,7 +36,9 @@ class SMSUseCase:
         # Limpiar el DataFrame eliminando todos los datos que esten vacios en la columna de numero de telefono (guardar este dato, cuantos se eliminaron)
         df[number_column] = dd.to_numeric(df[number_column], errors='coerce')
         df_clean = df.dropna(subset=[number_column])
-        
+        list = self.blacklist_crc_repo.get_black_list_crc()
+        df_clean["__number_concat__"] = str(payload.rulesCountry.codeCountry) + df_clean[number_column].astype(str)
+        df_clean = df_clean[~df_clean["__number_concat__"].isin(list)]
         # class cleaned_df:
         # Cruce con la lista de exclusion general CRC (si aplica)
         # Cruce de datos con la lista de exclusion (del usuario si lo requiere)

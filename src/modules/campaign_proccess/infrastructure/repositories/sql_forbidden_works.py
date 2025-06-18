@@ -11,5 +11,5 @@ class ForbiddenWordsRepository(IForbiddenWordsRepository):
         try: 
             return self.db.query(FiltroSMS.termino, FiltroSMS.id_autorizados).all()
         except Exception as e:
-            print("Excepción capturada:", e)
+            self.db.rollback()
             raise ValueError("Error al obtener las palabras no permitidas") from e

@@ -1,11 +1,11 @@
-from ..schemas.preload_camp_schema import PreloadCampDTO
-from ..use_cases.sms_proccess import SMSUseCase
 from core.file.file_reader import FileReader
-from ..factories.rules_country import RulesCountryFactory
 from modules.campaign_proccess.infrastructure.repositories.sql_forbidden_works import ForbiddenWordsRepository
-from modules.campaign_proccess.domain.services.forbbiden_works import ForbiddenWordsService
 from modules.campaign_proccess.infrastructure.cache.redis_cache import RedisCache
+from modules.campaign_proccess.domain.services.forbbiden_works import ForbiddenWordsService
 from modules.campaign_proccess.application.services.dataframe_preprocessor import DataFramePreprocessor
+from modules.campaign_proccess.application.use_cases.sms_proccess import SMSUseCase
+from modules.campaign_proccess.application.schemas.preload_camp_schema import PreloadCampDTO
+from modules.campaign_proccess.infrastructure.repositories.black_list_crc_repository import BlackListCRCRepository
 
 class SMSUseCaseBuilder:
     def __init__(
@@ -26,8 +26,10 @@ class SMSUseCaseBuilder:
                 "header": self.payload.configFile.useHeaders
             }
         )
-        db_forbidden = self.dbs.get("forbidden_words")
-        forbidden_words_repo = ForbiddenWordsRepository(db_forbidden)
+        db_filters = self.dbs.get("filter_db")
+        forbidden_words_repo = ForbiddenWordsRepository(db_filters)
+        blacklist_crc_repo = BlackListCRCRepository(db_filters)
+
         redis_cache = RedisCache(self.cache)  # Assuming RedisCache is the cache implementation
         forbidden_words_service = ForbiddenWordsService(
             repo=forbidden_words_repo,
@@ -36,5 +38,6 @@ class SMSUseCaseBuilder:
         df_processor = DataFramePreprocessor(file_reader)
         return SMSUseCase(
             df_processor=df_processor,
-            forbidden_service=forbidden_words_service
+            forbidden_service=forbidden_words_service,
+            blacklist_crc_repo=blacklist_crc_repo
         )
