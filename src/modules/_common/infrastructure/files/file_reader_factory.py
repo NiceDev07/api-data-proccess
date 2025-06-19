@@ -1,4 +1,4 @@
-from ..interfaces.file_reader import IFileReader
+from modules._common.domain.interfaces.file_reader import IFileReader
 from typing import Type
 from .csv_reader import CSVReader
 from .xlsx_reader import ExcelReader

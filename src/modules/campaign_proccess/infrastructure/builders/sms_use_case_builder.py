@@ -1,4 +1,4 @@
-from core.file.file_reader import FileReader
+from modules._common.infrastructure.files.file_reader_factory import FileReaderFactory
 from modules.campaign_proccess.infrastructure.repositories.sql_forbidden_works import ForbiddenWordsRepository
 from modules.campaign_proccess.infrastructure.cache.redis_cache import RedisCache
 from modules.campaign_proccess.domain.services.forbbiden_works import ForbiddenWordsService
@@ -19,8 +19,8 @@ class SMSUseCaseBuilder:
         self.cache = cache
 
     def build(self) -> SMSUseCase:
-        file_reader = FileReader().load(
-            path=self.payload.configFile.folder,
+        file_reader = FileReaderFactory.get_reader(
+            self.payload.configFile.folder,
             context={
                 "sep": self.payload.configFile.delimiter,
                 "header": self.payload.configFile.useHeaders

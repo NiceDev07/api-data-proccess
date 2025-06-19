@@ -1,5 +1,4 @@
 import dask.dataframe as dd
-import time
 from modules.campaign_proccess.application.schemas.preload_camp_schema import PreloadCampDTO
 from modules.campaign_proccess.domain.policies.composition import CompositeCountryValidator
 from modules.campaign_proccess.domain.policies.validate_policies import (CharacterSpecialPolicy, CharacterLimitPolicy)
