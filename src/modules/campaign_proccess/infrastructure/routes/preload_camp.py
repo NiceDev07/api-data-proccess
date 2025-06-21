@@ -22,7 +22,7 @@ async def preload_campaigns(
             "saem3": saem3_db,
             "filter_db": filter_db
         }
-        use_case = UseCaseFactory.create(service, payload, dbs, cache)
+        use_case = UseCaseFactory.create(service, payload.configFile, dbs, cache)
         return use_case.execute(payload) 
     except FileNotFoundError as e:
         return JSONResponse(

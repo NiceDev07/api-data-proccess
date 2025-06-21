@@ -23,7 +23,7 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_file=".env",
-        #extra="allow"  # Permite la existencia de variables extra
+        extra="ignore"  # Permite la existencia de variables extra
     )
 
 settings = Settings()
