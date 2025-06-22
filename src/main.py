@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from modules.campaign_proccess.infrastructure.routes.preload_camp import router as preload_router
+from modules.data_processing.infrastructure.routes.preload_camp import router as preload_router
 from modules._common.infrastructure.lifespan.dask_client import lifespan
 from config.settings import settings
 
