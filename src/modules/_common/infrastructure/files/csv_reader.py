@@ -1,10 +1,11 @@
 from modules._common.infrastructure.files.base_reader import BaseFileReader
 import dask.dataframe as dd
+from modules.data_processing.application.schemas.preload_camp_schema import BaseFileConfig 
 
 class CSVReader(BaseFileReader):
-    def __init__(self, sep: str = ";", header: bool = True):
-        self.sep = sep
-        self.header = header
+    def __init__(self, configFile: BaseFileConfig):
+        self.sep = configFile.delimiter
+        self.header = configFile.useHeaders
 
     def read(self, filepath: str, usecols=None, nrows=None) -> dd.DataFrame:
         try:

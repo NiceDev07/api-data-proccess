@@ -1,26 +1,5 @@
-from typing import List, Optional
+from typing import List, Optional, Literal
 from pydantic import BaseModel
-
-# NO APLICA
-# class Cost(BaseModel):
-#     subService: str
-#     value: int
-
-# NO APLICA
-# class Operator(BaseModel):
-#     name: str
-#     cost: List[Cost]
-#     prefix: str
-
-# NO APLICA
-# class ListCostService(BaseModel):
-#     type: str
-#     operator: List[Operator]
-
-# No APLICA
-# class PrefixItem(BaseModel):
-#     type: str
-#     prefix: List[str]
 
 # SI APLICA
 class RulesCountry(BaseModel):
@@ -35,40 +14,34 @@ class RulesCountry(BaseModel):
     # listCostService: List[ListCostService] # YA NO APLICA
     useShortName: bool
 
-
-class ConfigFile(BaseModel):
+class BaseFileConfig(BaseModel):
     folder: str
     file: str
     delimiter: str
     useHeaders: bool
     nameColumnDemographic: str
+
+class ConfigFile(BaseFileConfig):
     userIdentifier: bool
     nameColumnIdentifier: str
     fileRecords: int
 
-
-class ConfigListExclusion(BaseModel):
-    folder: Optional[str]
-    file: Optional[str]
-    delimiter: Optional[str]
-    useHeaders: Optional[bool]
-    nameColumnDemographic: Optional[str]
-    paramIdentifier: Optional[str]
-
+class ConfigListExclusion(BaseFileConfig):
+    paramIdentifier: Optional[Literal['demographic', 'identifier']] = None
 
 class InfoUserValidSend(BaseModel):
     levelUser: int
     demographic: str
 
 
-class PreloadCampDTO(BaseModel):
+class DataProcessingDTO(BaseModel):
     content: str
     shortname: str
     tariffId: int
     campaignId: List[int]
     configFile: ConfigFile
     useExclusionList: bool
-    configListExclusion: Optional[ConfigListExclusion]
+    configListExclusion: ConfigListExclusion = None
     subService: str
     rulesCountry: RulesCountry
     infoUserValidSend: InfoUserValidSend

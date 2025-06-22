@@ -1,24 +1,27 @@
 import dask.dataframe as dd
-from modules.data_processing.application.schemas.preload_camp_schema import PreloadCampDTO
+from modules.data_processing.application.schemas.preload_camp_schema import DataProcessingDTO
 from modules.data_processing.domain.policies.composition import CompositeCountryValidator
 from modules.data_processing.domain.policies.validate_policies import (CharacterSpecialPolicy, CharacterLimitPolicy)
 from modules.data_processing.application.services.forbbiden_works import ForbiddenWordsService
 from modules.data_processing.application.factories.rules_country import RulesCountryFactory
 from modules.data_processing.application.services.dataframe_preprocessor import DataFramePreprocessor
 from modules.data_processing.domain.interfaces.black_list_crc_repository import IBlackListCRCRepository
+from modules._common.domain.interfaces.file_reader import IFileReader
 
 class SMSUseCase:
     def __init__(
         self,
         df_processor: DataFramePreprocessor,
         forbidden_service: ForbiddenWordsService,
-        blacklist_crc_repo: IBlackListCRCRepository
+        blacklist_crc_repo: IBlackListCRCRepository,
+        exclusion_reader: IFileReader | None = None
     ):
         self.df_processor = df_processor
         self.forbidden_service = forbidden_service
         self.blacklist_crc_repo = blacklist_crc_repo
+        self.exclusion_reader = exclusion_reader
 
-    def execute(self, payload: PreloadCampDTO):
+    def execute(self, payload: DataProcessingDTO):
         rules_country = RulesCountryFactory.from_dto(payload.rulesCountry)
         # Se hace una primera validacion del mensaje base para determinar si cumple con las reglas del pais
         # Asi si no cumple, no se procede a leer el archivo evitando proccesos innecesarios (luego cuando se proccessa de nuevo se valida de nuevo) 
@@ -30,18 +33,34 @@ class SMSUseCase:
         self.forbidden_service.ensure_message_is_valid(payload.content, 4757)
         df = self.df_processor.load_dataframe(payload)
         number_column = payload.configFile.nameColumnDemographic
-        
         # START: PROCESO BASE (Logica compartida):
         # Limpiar el DataFrame eliminando todos los datos que esten vacios en la columna de numero de telefono (guardar este dato, cuantos se eliminaron)
         df[number_column] = dd.to_numeric(df[number_column], errors='coerce')
         df_clean = df.dropna(subset=[number_column])
+        
+        # Cruce con la lista de exclusion general CRC (si aplica)
         list = self.blacklist_crc_repo.get_black_list_crc()
         df_clean["__number_concat__"] = str(payload.rulesCountry.codeCountry) + df_clean[number_column].astype(str)
         df_clean = df_clean[~df_clean["__number_concat__"].isin(list)]
-        
-        # class cleaned_df:
-        # Cruce con la lista de exclusion general CRC (si aplica)
         # Cruce de datos con la lista de exclusion (del usuario si lo requiere)
+        if payload.configListExclusion:
+            #TODO: Definir por que columna se cruza la lista de exclusión Y determinar nameColumnDemographic ya que si no tiene encabezado no se puede usar nameColumnDemographic directamente en usecols
+            exclusion_column = payload.configListExclusion.nameColumnDemographic
+
+            # Leer archivo de exclusión con las columnas necesarias
+            df_exclusion = self.exclusion_reader.read(
+                payload.configListExclusion.folder,
+                usecols=[exclusion_column]
+            )
+
+            # Limpiar nulos y convertir a string para evitar errores de comparación
+            df_exclusion = df_exclusion.dropna(subset=[exclusion_column])
+            exclusion_values = df_exclusion[exclusion_column].astype(str)
+
+            # Filtrar los números que NO están en la lista de exclusión
+            df_clean[number_column] = df_clean[number_column].astype(str)
+            df_clean = df_clean[~df_clean[number_column].isin(exclusion_values)]
+
         # Cruce para identificar el operador del numero 
 
         # Personalizacion de mensaje 

@@ -1,4 +1,5 @@
 from modules._common.domain.interfaces.file_reader import IFileReader
+from modules.data_processing.application.schemas.preload_camp_schema import BaseFileConfig
 from typing import Type
 from .csv_reader import CSVReader
 from .xlsx_reader import ExcelReader
@@ -15,11 +16,11 @@ class FileReaderFactory:
         cls._readers[ext.lower()] = reader_cls
 
     @classmethod
-    def get_reader(cls, filepath: str, context: dict) -> IFileReader:
-        ext = filepath.split('.')[-1].lower()
+    def get_reader(cls, configFile: BaseFileConfig) -> IFileReader:
+        ext = configFile.folder.split('.')[-1].lower()
         reader_cls = cls._readers.get(ext)
         if not reader_cls:
             raise ValueError(f"Formato de archivo '{ext}' no soportado")
-        return reader_cls(**context)
+        return reader_cls(configFile)
     
 

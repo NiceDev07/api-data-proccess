@@ -13,7 +13,7 @@ async def lifespan(app: FastAPI):
         threads_per_worker=settings.DASK_THREADS_PER_WORKER, #Indica el número de hilos (threads) que cada trabajador utilizará. Esto es útil para aprovechar los núcleos de CPU disponibles en cada máquina.
         memory_limit=settings.DASK_MEMORY_LIMIT, #Especifica el límite de memoria que cada trabajador puede usar. Esto es importante para evitar que un trabajador consuma toda la memoria disponible y cause problemas en el sistema.
         processes=True, #Indica si se deben usar procesos en lugar de hilos para cada trabajador. Esto puede ser útil para evitar problemas de bloqueo de memoria compartida y aprovechar mejor los recursos del sistema.
-        asynchronous=True #Permite que el clúster se ejecute de manera asíncrona, lo que es útil para integrarse con aplicaciones asíncronas como FastAPI.
+        #asynchronous=True #Permite que el clúster se ejecute de manera asíncrona, lo que es útil para integrarse con aplicaciones asíncronas como FastAPI.
     )
     client = await Client(cluster, asynchronous=True)
     app.state.dask_client = client
