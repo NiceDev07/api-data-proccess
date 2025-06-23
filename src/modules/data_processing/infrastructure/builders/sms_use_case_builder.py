@@ -8,6 +8,8 @@ from modules.data_processing.application.use_cases.sms_proccess import SMSUseCas
 from modules.data_processing.infrastructure.repositories.black_list_crc_repository import BlackListCRCRepository
 from modules.data_processing.application.schemas.preload_camp_schema import DataProcessingDTO
 from modules.data_processing.infrastructure.db.db_context import DbContext
+from modules.data_processing.infrastructure.repositories.sql_numeracion import NumeracionRepository
+from modules.data_processing.infrastructure.repositories.sql_tariff_cost import CostRepository
 
 class SMSUseCaseBuilder:
     def __init__(
@@ -35,10 +37,14 @@ class SMSUseCaseBuilder:
             exclusion_reader = FileReaderFactory.get_reader(configFile=self.payload.configListExclusion)
 
         df_processor = DataFramePreprocessor(file_reader)
+        numeracion_repo = NumeracionRepository(self.dbs.portabilidad_db)
+        tariff_repo = CostRepository(self.dbs.saem3)
 
         return SMSUseCase(
             df_processor=df_processor,
             forbidden_service=forbidden_words_service,
             blacklist_crc_repo=blacklist_crc_repo,
-            exclusion_reader=exclusion_reader if self.payload.configListExclusion else None
+            exclusion_reader=exclusion_reader if self.payload.configListExclusion else None,
+            numeracion_repo=numeracion_repo,
+            tariff_repo=tariff_repo
         )
