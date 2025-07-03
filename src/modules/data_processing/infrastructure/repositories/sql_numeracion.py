@@ -16,6 +16,7 @@ class NumeracionRepository(INumeracionRepository):
                 Numeracion.operador
             )
             .filter(Numeracion.id_pais == country_id)
+            .order_by(Numeracion.inicio.asc())
             .all()
         )
         return result

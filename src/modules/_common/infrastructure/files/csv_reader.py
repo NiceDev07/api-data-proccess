@@ -1,5 +1,5 @@
 from modules._common.infrastructure.files.base_reader import BaseFileReader
-import dask.dataframe as dd
+import polars as pl
 from modules.data_processing.application.schemas.preload_camp_schema import BaseFileConfig 
 
 class CSVReader(BaseFileReader):
@@ -7,15 +7,26 @@ class CSVReader(BaseFileReader):
         self.sep = configFile.delimiter
         self.header = configFile.useHeaders
 
-    def read(self, filepath: str, usecols=None, nrows=None) -> dd.DataFrame:
+    def read(self, filepath: str, usecols=None, nrows=None) -> pl.DataFrame:
         try:
             self._check_file_exists(filepath)
-            df = dd.read_csv(filepath, sep=self.sep, dtype=str, assume_missing=True, usecols=usecols, blocksize="64MB", header=0 if self.header else None)  # ajusta blocksize según tus recursos
+
+            df = pl.read_csv(
+                filepath,
+                separator=self.sep,
+                has_header=self.header,
+                columns=usecols,
+                n_rows=nrows,
+                try_parse_dates=True,
+                encoding="utf8-lossy",  # Evita errores de decodificación
+            )
+
             return df
-        except UnicodeDecodeError as e:
-            raise ValueError(f"Error decoding CSV file: {e}")
-        except ValueError as e:
-            raise ValueError(f"Value error while reading CSV file: {str(e)}. Please check the CSV format and provided parameters.")
+
+        except pl.exceptions.ComputeError as e:
+            raise ValueError(f"Error reading CSV file with Polars: {e}")
+        except FileNotFoundError:
+            raise FileNotFoundError(f"File not found: {filepath}")
         except Exception as e:
             raise RuntimeError(f"Unexpected error while reading CSV file: {str(e)}")
 

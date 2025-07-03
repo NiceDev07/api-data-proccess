@@ -1,4 +1,3 @@
-import dask.dataframe as dd
 from modules.data_processing.application.schemas.preload_camp_schema import DataProcessingDTO
 from modules.data_processing.domain.policies.composition import CompositeCountryValidator
 from modules.data_processing.domain.policies.validate_policies import (CharacterSpecialPolicy, CharacterLimitPolicy)
@@ -11,6 +10,9 @@ from modules.data_processing.domain.interfaces.numeracion_repository import INum
 from modules.data_processing.application.services.operator_detector import OperatorDetector
 from modules.data_processing.domain.interfaces.tariff_repository import ICostRepository
 from modules.data_processing.application.services.cost_service import CostCalculatorService
+import polars as pl
+from modules.data_processing.application.helpers.tags import extract_tags_with_repeats
+import re
 
 class SMSUseCase:
     def __init__(
@@ -41,46 +43,79 @@ class SMSUseCase:
         self.forbidden_service.ensure_message_is_valid(payload.content, 4757)
         df = self.df_processor.load_dataframe(payload)
         number_column = payload.configFile.nameColumnDemographic
-        
+
         # START: PROCESO BASE (Logica compartida):
-        # Limpiar el DataFrame eliminando todos los datos que esten vacios en la columna de numero de telefono (guardar este dato, cuantos se eliminaron)
-        df[number_column] = dd.to_numeric(df[number_column], errors='coerce')
-        df_clean = df.dropna(subset=[number_column])
-        
-        # Cruce con la lista de exclusion general CRC (si aplica)
-        list = self.blacklist_crc_repo.get_black_list_crc()
-        df_clean["__number_concat__"] = str(payload.rulesCountry.codeCountry) + df_clean[number_column].astype(str)
-        df_clean = df_clean[~df_clean["__number_concat__"].isin(list)]
+        # Paso 1: Convertir a string y eliminar vacíos y nulos
+        df = df.with_columns(
+            pl.col(number_column).cast(pl.Utf8).alias(number_column)
+        )
+        df = df.filter(
+            (pl.col(number_column).is_not_null()) &
+            (pl.col(number_column).str.strip_chars().str.len_chars() > 0)
+        )
+
+        # Paso 2: Obtener blacklist como set
+        blacklist_set = set(self.blacklist_crc_repo.get_black_list_crc())
+
+        # Paso 3: Concatenar código de país
+        prefix = str(payload.rulesCountry.codeCountry)
+        df = df.with_columns(
+            (pl.lit(prefix) + pl.col(number_column)).alias("__number_concat__")
+        )
+
+        # Paso 4: Filtrar blacklist
+        df = df.filter(~pl.col("__number_concat__").is_in(blacklist_set))
+
 
         # Cruce de datos con la lista de exclusion (del usuario si lo requiere)
         if payload.configListExclusion:
-            #TODO: Definir por que columna se cruza la lista de exclusión Y determinar nameColumnDemographic ya que si no tiene encabezado no se puede usar nameColumnDemographic directamente en usecols
             exclusion_column = payload.configListExclusion.nameColumnDemographic
 
-            # Leer archivo de exclusión con las columnas necesarias
+            # Leer archivo de exclusión
             df_exclusion = self.exclusion_reader.read(
                 payload.configListExclusion.folder,
                 usecols=[exclusion_column]
             )
 
-            # Limpiar nulos y convertir a string para evitar errores de comparación
-            df_exclusion = df_exclusion.dropna(subset=[exclusion_column])
-            exclusion_values = df_exclusion[exclusion_column].astype(str)
+            # Limpiar nulos y convertir a string
+            df_exclusion = df_exclusion.with_columns(
+                pl.col(exclusion_column).cast(pl.Utf8)
+            ).filter(
+                pl.col(exclusion_column).is_not_null() &
+                (pl.col(exclusion_column).str.strip_chars().str.len_chars() > 0)
+            )
 
-            # Filtrar los números que NO están en la lista de exclusión
-            df_clean[number_column] = df_clean[number_column].astype(str)
-            df_clean = df_clean[~df_clean[number_column].isin(exclusion_values)]
+            # Obtener valores únicos de exclusión como set
+            exclusion_values = set(df_exclusion[exclusion_column].to_list())
 
-        # Personalizacion de mensaje
-        df_clean = df_clean.map_partitions(lambda pdf: pdf.assign(
-            __message__=pdf.apply(lambda row: payload.content.format(**row), axis=1)
-        ))
+            # Asegurarse de que el número esté en string
+            df = df.with_columns(
+                pl.col(number_column).cast(pl.Utf8)
+            )
 
-        # Cruce para identificar el operador del numero 
+            # Filtrar registros que NO estén en la lista de exclusión
+            df = df.filter(~pl.col(number_column).is_in(exclusion_values))
+
+        # # Personalizacion de mensaje
+        ordered_tags = extract_tags_with_repeats(payload.content)
+        template_polars = re.sub(r"{(\w+(?:-\d+)?)\}", "{}", payload.content)
+
+        df = df.with_columns(
+            pl.format(
+                template_polars,
+                *[pl.col(tag).cast(pl.Utf8) for tag in ordered_tags]
+            ).alias("__message__")
+        )
+
+
+        # # Cruce para identificar el operador del numero 
         ranges = self.numeracion_repo.get_numeracion(payload.rulesCountry.idCountry)
         dector = OperatorDetector(ranges=ranges)
-        df_clean = dector.assign_operator(df_clean, number_column)
-        result = self.tariff_repo.get_tariff_cost_data(payload.rulesCountry.idCountry, 1, "sms")
+        df = dector.assign_operator(df, number_column)
+       
+        df.write_parquet("resultados/conoperator.parquet", compression="zstd")
+        print(df.head(10))
+        # result = self.tariff_repo.get_tariff_cost_data(payload.rulesCountry.idCountry, 1, "sms")
         
         # Calculo de costo del mensaje
         # Validar Rules del pais para determinar si todo esta OK con los mensajes personalizados
