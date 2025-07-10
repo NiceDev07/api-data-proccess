@@ -1,3 +1,4 @@
+import polars as pl
 from modules.data_processing.domain.interfaces.forbidden_words_repository import IForbiddenWordsRepository
 from modules.data_processing.domain.interfaces.cache_interface import ICache
 from modules.data_processing.domain.utils.forbidden_words_adapter import ForbiddenWordsCacheAdapter
@@ -41,3 +42,33 @@ class ForbiddenWordsService:
         """Lanza excepción si el mensaje no es válido."""
         if not self.validate_message(message, user_id):
             raise ValueError(f"El Contenido base contiene palabras no autorizadas. {message}")
+        
+    def ensure_dataframe_values_are_valid(self, df: pl.DataFrame, columns: list[str], user_id: int):
+        """
+        Valida que ninguna palabra prohibida esté presente en las columnas especificadas.
+        Usa comparación directa y única (sin regex), altamente eficiente.
+        """
+        forbidden_words = set(word.lower() for word in self.get_forbidden_words_for_user(user_id) if word.strip())
+        if not forbidden_words:
+            return
+
+        for col in columns:
+            try:
+                # Obtener valores únicos en lowercase
+                unique_values = (
+                    df.select(pl.col(col).cast(pl.Utf8).str.strip_chars().str.to_lowercase())
+                    .unique()
+                    .get_column(col)
+                    .to_list()
+                )
+
+                # Buscar intersección con palabras prohibidas
+                intersecting = forbidden_words.intersection(unique_values)
+                if intersecting:
+                    raise ValueError(
+                        f"La columna '{col}' contiene palabras no autorizadas"
+                    )
+
+            except Exception as e:
+                raise RuntimeError(f"Error validando columna '{col}': {str(e)}") from e
+

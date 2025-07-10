@@ -1,3 +1,6 @@
+import re
+import polars as pl
+from modules.data_processing.domain.services.cost_assigner import CostAssigner
 from modules.data_processing.application.schemas.preload_camp_schema import DataProcessingDTO
 from modules.data_processing.domain.policies.composition import CompositeCountryValidator
 from modules.data_processing.domain.policies.validate_policies import (CharacterSpecialPolicy, CharacterLimitPolicy)
@@ -10,9 +13,7 @@ from modules.data_processing.domain.interfaces.numeracion_repository import INum
 from modules.data_processing.application.services.operator_detector import OperatorDetector
 from modules.data_processing.domain.interfaces.tariff_repository import ICostRepository
 from modules.data_processing.application.services.cost_service import CostCalculatorService
-import polars as pl
 from modules.data_processing.application.helpers.tags import extract_tags_with_repeats
-import re
 
 class SMSUseCase:
     def __init__(
@@ -100,6 +101,14 @@ class SMSUseCase:
         ordered_tags = extract_tags_with_repeats(payload.content)
         template_polars = re.sub(r"{(\w+(?:-\d+)?)\}", "{}", payload.content)
 
+        # Valida si las etiquetas usadas no contienen palabras prohibidas
+        self.forbidden_service.ensure_dataframe_values_are_valid(
+            df,
+            ordered_tags,
+            4757
+        )
+
+        #Personaliza el mensaje con las etiquetas
         df = df.with_columns(
             pl.format(
                 template_polars,
@@ -107,16 +116,16 @@ class SMSUseCase:
             ).alias("__message__")
         )
 
-
         # # Cruce para identificar el operador del numero 
         ranges = self.numeracion_repo.get_numeracion(payload.rulesCountry.idCountry)
         dector = OperatorDetector(ranges=ranges)
         df = dector.assign_operator(df, number_column)
        
-        df.write_parquet("resultados/conoperator.parquet", compression="zstd")
-        print(df.head(10))
-        # result = self.tariff_repo.get_tariff_cost_data(payload.rulesCountry.idCountry, 1, "sms")
-        
+        # df.write_parquet("resultados/conoperator.parquet", compression="zstd")
+        # Obtiene los costos de los prefijos
+        result = self.tariff_repo.get_prefix_cost_pairs(payload.rulesCountry.idCountry, 1, "sms")
+        cost_asigner = CostAssigner(result, default_cost=0.0)
+        df = cost_asigner.assign_cost(df, "__number_concat__")
         # Calculo de costo del mensaje
         # Validar Rules del pais para determinar si todo esta OK con los mensajes personalizados
 
