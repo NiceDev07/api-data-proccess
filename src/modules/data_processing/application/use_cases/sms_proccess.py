@@ -128,6 +128,74 @@ class SMSUseCase:
         df = cost_asigner.assign_cost(df, "__number_concat__")
         # Calculo de costo del mensaje
         # Validar Rules del pais para determinar si todo esta OK con los mensajes personalizados
+        df = df.with_columns(
+            pl.col('__message__').str.len_chars().alias('__length__'),
+            pl.col('__message__').str.len_bytes().alias('__length_bytes__')
+        )
+
+        df = df.with_columns(
+            (pl.col('__length__') != pl.col('__length_bytes__')).alias('__is_character_special__')
+        )
+        
+        pdu_standard = 160
+        overhead_standard = 7
+        pdu_special = 70
+        overhead_special = 3
+
+        # Referencia en pandas con numpy 
+        # credit_base = np.where(is_special, self.PDU.SPECIAL, self.PDU.STANDARD)
+        # overhead = np.where(is_special, self.PDU.OVERHEAD_SPECIAL, self.PDU.OVERHEAD)
+
+        # # Calcula el divisor vectorizado: para mensajes que entran en el crédito base se utiliza credit_base,
+        # # para los demás se descuenta el overhead
+        # divisor = np.where(total_length_arr <= credit_base, credit_base, credit_base - overhead)
+
+        df = df.with_columns([
+            # Paso 1: credit_base según si es especial
+            pl.when(pl.col("__is_character_special__"))
+            .then(pl.lit(pdu_special))
+            .otherwise(pl.lit(pdu_standard))
+            .alias("__credit_base__"),
+
+            # Paso 2: overhead
+            pl.when(pl.col("__is_character_special__"))
+            .then(pl.lit(overhead_special))
+            .otherwise(pl.lit(overhead_standard))
+            .alias("__overhead__")
+        ])
+
+        # Paso 3: divisor
+        df = df.with_columns(
+            pl.when(pl.col("__length__") <= pl.col("__credit_base__"))
+            .then(pl.col("__credit_base__"))
+            .otherwise(pl.col("__credit_base__") - pl.col("__overhead__"))
+            .alias("__divisor__")
+        )
+
+        # Paso 4: calcular PDUs
+        df = df.with_columns(
+            (pl.col("__length__") / pl.col("__divisor__"))
+            .ceil()
+            .cast(pl.Int32)
+            .alias("__pdu_total__")
+        )
+
+        #paso 5: calcular Creditos consumidos
+        df = df.with_columns(
+            (pl.col("__pdu_total__") * pl.col("__cost__"))
+            .cast(pl.Float64)
+            .alias("__credits__")
+        )
+        print(df[['__number_concat__', '__message__', '__credits__', '__pdu_total__', '__is_character_special__', '__length__']].head(10))
+
+        #Filtrar por los que superen el limite de caracteres
+        df_filter = df.filter(pl.col('__length__') > pl.when(pl.col("__is_character_special__")).then(pl.lit(rules_country.limit_character_special)).otherwise(pl.lit(rules_country.limit_character)))
+        # SI hay datos que no cumplen con las reglas del pais, se lanza una excepcion
+        if df_filter.height > 0:
+            raise ValueError(
+                "El mensaje supera el límite de caracteres permitido para el país seleccionado. "
+            )
+
 
         # Crear un archivo parquet listo para insercion masiva en la base de datos
         # FIN: PROCESO BASE:

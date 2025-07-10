@@ -1,3 +1,4 @@
+import os
 from modules._common.domain.interfaces.file_reader import IFileReader
 from modules.data_processing.application.schemas.preload_camp_schema import BaseFileConfig
 from typing import Type
@@ -17,7 +18,7 @@ class FileReaderFactory:
 
     @classmethod
     def get_reader(cls, configFile: BaseFileConfig) -> IFileReader:
-        ext = configFile.folder.split('.')[-1].lower()
+        ext = os.path.splitext(configFile.folder)[1][1:].lower()
         reader_cls = cls._readers.get(ext)
         if not reader_cls:
             raise ValueError(f"Formato de archivo '{ext}' no soportado")
