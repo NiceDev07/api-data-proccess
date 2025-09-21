@@ -16,11 +16,6 @@ class Settings(BaseSettings):
     DB_PORTABILIDAD: str = "mysql+mysqlconnector://user:pass@host:port/database"
     DB_MASIVOS_SMS: str = "mysql+mysqlconnector://user:pass@host:port/database"
 
-    DASK_N_WORKERS: int = 4
-    DASK_THREADS_PER_WORKER: int = 1
-    DASK_MEMORY_LIMIT: str = "2GB"
-    DASK_PROCESSES: bool = True
-
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore"  # Permite la existencia de variables extra
