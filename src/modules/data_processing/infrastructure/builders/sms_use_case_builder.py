@@ -10,6 +10,9 @@ from modules.data_processing.application.schemas.preload_camp_schema import Data
 from modules.data_processing.infrastructure.db.db_context import DbContext
 from modules.data_processing.infrastructure.repositories.sql_numeracion import NumeracionRepository
 from modules.data_processing.infrastructure.repositories.sql_tariff_cost import CostRepository
+from modules.data_processing.application.services.rne_service import RneService
+from modules.data_processing.application.services.numeration_service import NumerationService
+from modules.data_processing.application.services.cost_service import CostService
 
 class SMSUseCaseBuilder:
     def __init__(
@@ -31,6 +34,11 @@ class SMSUseCaseBuilder:
             repo=forbidden_words_repo,
             cache=redis_cache
         )
+
+        rne_service = RneService(
+            rne_repository=blacklist_crc_repo,
+            cache=redis_cache
+        )
         
         file_reader = FileReaderFactory.get_reader(configFile=self.payload.configFile)
         if self.payload.configListExclusion is not None:
@@ -39,12 +47,22 @@ class SMSUseCaseBuilder:
         df_processor = DataFramePreprocessor(file_reader)
         numeracion_repo = NumeracionRepository(self.dbs.portabilidad_db)
         tariff_repo = CostRepository(self.dbs.saem3)
+        number_service = NumerationService(
+            numeration_repo=numeracion_repo,
+            cache=redis_cache
+        )
+        cost_service = CostService(
+            cache=redis_cache,
+            cost_repo=tariff_repo
+        )
 
         return SMSUseCase(
             df_processor=df_processor,
             forbidden_service=forbidden_words_service,
-            blacklist_crc_repo=blacklist_crc_repo,
+            rne_service=rne_service,
             exclusion_reader=exclusion_reader if self.payload.configListExclusion else None,
             numeracion_repo=numeracion_repo,
-            tariff_repo=tariff_repo
+            tariff_repo=tariff_repo,
+            number_service=number_service,
+            cost_service=cost_service
         )

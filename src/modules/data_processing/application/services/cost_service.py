@@ -1,28 +1,33 @@
-from modules.data_processing.domain.value_objects.tel_cost_info import TelcoCostInfo
-import dask.dataframe as dd
-import pandas as pd
-import numpy as np
+from modules.data_processing.domain.interfaces.tariff_repository import ICostRepository
+from modules.data_processing.domain.interfaces.cache_interface import ICache
+
+class CostService:
+    KEY = "costs"
+    TTL = 60*5
+    def __init__(
+        self,
+        cost_repo: ICostRepository,
+        cache: ICache
+    ):
+        self.cost_repo = cost_repo
+        self.cache = cache
+
+    def __get_key(self, country_id: int, tariff_id:int, service: str):
+        return f"cost:t{tariff_id}:c{country_id}:s{service}"
 
 
-class CostCalculatorService:
-    def __init__(self, cost_info: TelcoCostInfo):
-        self.prefixes = cost_info.prefixes
-        self.costs = cost_info.costs
-        self.lengths = cost_info.lengths
+    def get_costs(self, country_id: int, tariff_id:int, service: str):
+        key = self.__get_key(country_id, tariff_id, service)
+        prefix_costs = self.cache.get(key)
 
-    def assign_costs(self, df: dd.DataFrame, number_column: str, new_col: str = "__cost__") -> dd.DataFrame:
-        prefixes = self.prefixes
-        costs = self.costs
+        if prefix_costs is None:
+           costs = self.cost_repo.get_tariff_costs(country_id, tariff_id, service)
+           prefix_costs = sorted(costs, key=lambda x: len(x[0]), reverse=True)
+        #    self.cache.set(key, costs, self.TTL)
 
-        def match_prefix_and_assign(series):
-            numbers = series.astype(str).values
-            result = np.full_like(numbers, np.nan, dtype=float)
-            for prefix, cost in zip(prefixes, costs):
-                mask = np.char.startswith(numbers, prefix)
-                result[mask] = cost  # Overwrites with more specific prefix
-            return pd.Series(result, index=series.index)
+        return prefix_costs
+            
+        
 
-        return df.map_partitions(
-            lambda pdf: pdf.assign(**{new_col: match_prefix_and_assign(pdf[number_column])}),
-            meta=df.head(0).assign(**{new_col: np.float64()})  # <--- explícito
-        )
+    
+        

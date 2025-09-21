@@ -35,15 +35,15 @@ class InfoUserValidSend(BaseModel):
 
 
 class DataProcessingDTO(BaseModel):
-    content: str
+    content: str # Tener en cuenta para el hash
     shortname: str
-    tariffId: int
+    tariffId: int # Tener en cuenta para el hash
     campaignId: List[int]
-    configFile: ConfigFile
-    useExclusionList: bool
-    configListExclusion: ConfigListExclusion = None
-    subService: str
-    rulesCountry: RulesCountry
-    infoUserValidSend: InfoUserValidSend
+    configFile: ConfigFile # Tener en cuenta para el hash
+    useExclusionList: bool # Tener en cuenta para el hash
+    configListExclusion: ConfigListExclusion = None # Tener en cuenta para el hash
+    subService: str # Tener en cuenta para el hash
+    rulesCountry: RulesCountry # Tener en cuenta para el hash
+    infoUserValidSend: InfoUserValidSend # Tener en cuenta para el hash
     # listBlockTerms: List[str] # YA DEBERIA APLICAR
     # listExclusionGeneral: List[str] # Ya no DBERIA APLICAR

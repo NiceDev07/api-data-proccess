@@ -1,0 +1,33 @@
+from modules.data_processing.domain.interfaces.cache_interface import ICache
+from modules.data_processing.domain.interfaces.numeracion_repository import INumeracionRepository
+import numpy as np
+
+class NumerationService:
+    KEY_CACHE = "numeration:v1"
+    TTL_SECONDS = 60*60*2
+    
+    def __init__(
+        self,
+        numeration_repo: INumeracionRepository,
+        cache: ICache
+    ):
+        self.numeration_repo = numeration_repo
+        self.cache = cache
+
+    def get_key_cache(self, country_id: int) -> str:
+        return f"{self.KEY_CACHE}:{country_id}"
+
+    def get_ranges(self, country_id: int) -> list[tuple[int, int, str]]:
+        key_cache = self.get_key_cache(country_id)
+        cached = self.cache.get(key_cache)
+        if cached is not None:
+            return cached
+        
+        ranges = self.numeration_repo.get_numeracion(country_id)
+        sorted_ranges = sorted(ranges, key=lambda r: r[0])
+        starts = np.array([r[0] for r in sorted_ranges], dtype=np.int64)
+        ends = np.array([r[1] for r in sorted_ranges], dtype=np.int64)
+        operators = np.array([r[2] for r in sorted_ranges], dtype=object)
+        # self.cache.set(key_cache, (starts, ends, operators), self.TTL_SECONDS)  # Cachear la tupla
+        
+        return starts, ends, operators
