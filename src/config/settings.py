@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     DB_SAEM3: str = "mysql+mysqlconnector://user:pass@host:port/database"
     DB_PORTABILIDAD: str = "mysql+mysqlconnector://user:pass@host:port/database"
     DB_MASIVOS_SMS: str = "mysql+mysqlconnector://user:pass@host:port/database"
+    REDIS_URL: str = "redis://localhost:6379/0"
 
     model_config = SettingsConfigDict(
         env_file=".env",
