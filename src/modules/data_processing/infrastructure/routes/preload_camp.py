@@ -12,12 +12,12 @@ router = APIRouter()
 async def preload_campaigns(
     service: Literal["sms", "email", "call_blasting", "api_call"],
     payload: DataProcessingDTO,
+    cache: Depends = Depends(get_redis_client),
     dbs = Depends(get_databases),
-    cache: Depends = Depends(get_redis_client)
 ):
     try:
         use_case = UseCaseFactory.create(service, payload, dbs, cache)
-        return use_case.execute(payload) 
+        return await use_case.execute(payload) 
     except FileNotFoundError as e:
         return JSONResponse(
             status_code=404,

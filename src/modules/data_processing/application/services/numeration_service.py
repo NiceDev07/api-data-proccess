@@ -17,13 +17,13 @@ class NumerationService:
     def get_key_cache(self, country_id: int) -> str:
         return f"{self.KEY_CACHE}:{country_id}"
 
-    def get_ranges(self, country_id: int) -> list[tuple[int, int, str]]:
+    async def get_ranges(self, country_id: int) -> list[tuple[int, int, str]]:
         key_cache = self.get_key_cache(country_id)
-        cached = self.cache.get(key_cache)
+        cached = await self.cache.get(key_cache)
         if cached is not None:
             return cached
         
-        ranges = self.numeration_repo.get_numeracion(country_id)
+        ranges = await self.numeration_repo.get_numeracion(country_id)
         sorted_ranges = sorted(ranges, key=lambda r: r[0])
         starts = np.array([r[0] for r in sorted_ranges], dtype=np.int64)
         ends = np.array([r[1] for r in sorted_ranges], dtype=np.int64)

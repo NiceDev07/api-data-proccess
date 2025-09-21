@@ -46,7 +46,7 @@ class SMSUseCase:
         self.cost_service = cost_service
         self.cols = Cols()
 
-    def execute(self, payload: DataProcessingDTO):
+    async def execute(self, payload: DataProcessingDTO):
         rules_country = RulesCountryFactory.from_dto(payload.rulesCountry)
         # Se hace una primera validacion del mensaje base para determinar si cumple con las reglas del pais
         # Asi si no cumple, no se procede a leer el archivo evitando proccesos innecesarios (luego cuando se proccessa de nuevo se valida de nuevo) 
@@ -55,13 +55,13 @@ class SMSUseCase:
             content=payload.content,
             rules=rules_country
         )
-        self.forbidden_service.ensure_message_is_valid(payload.content, 4757)
+        await self.forbidden_service.ensure_message_is_valid(payload.content, 4757)
         df = self.df_processor.load_dataframe(payload)
         ordered_tags = extract_tags_with_repeats(payload.content)
         template_polars = re.sub(r"{(\w+(?:-\d+)?)\}", "{}", payload.content)
 
         # Valida si las etiquetas usadas no contienen palabras prohibidas
-        self.forbidden_service.ensure_dataframe_values_are_valid(
+        await self.forbidden_service.ensure_dataframe_values_are_valid(
             df,
             ordered_tags,
             4757
@@ -72,8 +72,8 @@ class SMSUseCase:
         # df = df.with_columns(pl.lit(True).alias("__eligible__"))
         df = CleanData().execute(df, payload) # Paso 1: Convertir a string y eliminar vacíos y nulos
         df = ConcatPrefix().execute(df, payload) # Paso 2: Concatenar código de país
-        df = AssignOperator(self.number_service).execute(df, payload) # Paso 5: Identificar operador del número
-        df = ExclutionRne(self.rne_service).execute(df, payload) # Paso 3.1: Obtener blacklist como set, Pasar como service con redis
+        df = await AssignOperator(self.number_service).execute(df, payload) # Paso 5: Identificar operador del número
+        df = await ExclutionRne(self.rne_service).execute(df, payload) # Paso 3.1: Obtener blacklist como set, Pasar como service con redis
 
         if payload.configListExclusion:
             exclusion_column = payload.configListExclusion.nameColumnDemographic
@@ -103,7 +103,7 @@ class SMSUseCase:
             # Filtrar registros que NO estén en la lista de exclusión
             df = df.filter(~pl.col(number_column).is_in(exclusion_values))
 
-        df = AssignOperator(self.number_service).execute(df, payload) # Paso 5: Identificar operador del número
+        df = await AssignOperator(self.number_service).execute(df, payload) # Paso 5: Identificar operador del número
 
         df = CustomMessage(
             template_polars=template_polars,
@@ -111,9 +111,9 @@ class SMSUseCase:
             cols=self.cols
         ).execute(df, payload)
         df = CalculatePDU().execute(df, payload)
-        df = AssignCost(self.cost_service, self.cols).execute(df, payload)
+        df = await AssignCost(self.cost_service, self.cols).execute(df, payload)
         df = CaculateCredits().execute(df, payload)
-        df.write_parquet("resultados/test.parquet", compression="zstd")
+        # df.write_parquet("resultados/test.parquet", compression="zstd")
         return { 'success': True }
     
 # print(df[['__number_concat__', '__message__', '__credits__', '__pdu_total__', '__is_character_special__', '__length__']].head(10))

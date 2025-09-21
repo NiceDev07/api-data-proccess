@@ -16,12 +16,12 @@ class CostService:
         return f"cost:t{tariff_id}:c{country_id}:s{service}"
 
 
-    def get_costs(self, country_id: int, tariff_id:int, service: str):
+    async def get_costs(self, country_id: int, tariff_id:int, service: str):
         key = self.__get_key(country_id, tariff_id, service)
-        prefix_costs = self.cache.get(key)
+        prefix_costs = await self.cache.get(key)
 
         if prefix_costs is None:
-           costs = self.cost_repo.get_tariff_costs(country_id, tariff_id, service)
+           costs = await self.cost_repo.get_tariff_costs(country_id, tariff_id, service)
            prefix_costs = sorted(costs, key=lambda x: len(x[0]), reverse=True)
         #    self.cache.set(key, costs, self.TTL)
 

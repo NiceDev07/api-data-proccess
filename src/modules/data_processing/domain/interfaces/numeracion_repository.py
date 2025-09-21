@@ -3,6 +3,6 @@ from typing import List, Tuple
 
 class INumeracionRepository(ABC):
     @abstractmethod
-    def get_numeracion(self, country_id: int) -> List[Tuple[int, int, str]]:
+    async def get_numeracion(self, country_id: int) -> List[Tuple[int, int, str]]:
         """Retrieve numeration data for a given country and service."""
         pass

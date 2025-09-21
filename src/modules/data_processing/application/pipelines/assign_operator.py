@@ -16,9 +16,9 @@ class AssignOperator(IPipeline):
         self.numeration_service = numeration_service
         self.cols = cols
 
-    def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
+    async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
         phone_column = ctx.configFile.nameColumnDemographic
-        starts, ends, operators = self.numeration_service.get_ranges(ctx.rulesCountry.idCountry)
+        starts, ends, operators = await self.numeration_service.get_ranges(ctx.rulesCountry.idCountry)
         df = df.with_columns(pl.col(phone_column).cast(pl.Int64))
 
         # Obtener los números como array NumPy

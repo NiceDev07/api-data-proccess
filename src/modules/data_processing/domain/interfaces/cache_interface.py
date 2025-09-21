@@ -3,13 +3,13 @@ from typing import Optional, Any
 
 class ICache(ABC):
     @abstractmethod
-    def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Optional[Any]:
         pass
 
     @abstractmethod
-    def set(self, key: str, value: Any, ttl: int = 3600) -> None:
+    async def set(self, key: str, value: Any, ttl: int = 3600) -> None:
         pass
 
     @abstractmethod
-    def delete(self, key: str) -> None:
+    async def delete(self, key: str) -> None:
         pass

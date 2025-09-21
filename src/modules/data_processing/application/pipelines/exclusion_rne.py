@@ -8,8 +8,8 @@ class ExclutionRne(IPipeline):
         self.rne_service =  rne_service
         
 
-    def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
-        blacklist_set = self.rne_service.get_list_rne()
+    async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
+        blacklist_set = await self.rne_service.get_list_rne()
         # Paso 4: Filtrar blacklist
         df = df.filter(~pl.col("__number_concat__").is_in(blacklist_set))
 

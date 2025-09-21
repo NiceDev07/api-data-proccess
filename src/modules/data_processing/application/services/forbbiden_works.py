@@ -17,38 +17,38 @@ class ForbiddenWordsService:
         self.repo = repo
         self.cache = cache
 
-    def _load_forbidden_words(self) -> dict[str, list[str]]:
+    async def _load_forbidden_words(self) -> dict[str, list[str]]:
         """Carga y adapta los datos crudos desde el repositorio."""
-        raw_words = self.repo.get_word_not_allowed()
+        raw_words = await self.repo.get_word_not_allowed()
         adapter = ForbiddenWordsCacheAdapter(raw_words)
         return adapter.to_dict_by_user()
 
-    def get_forbidden_words_for_user(self, user_id: int) -> list[str]:
-        cache_data = self.cache.get(self.CACHE_KEY)
+    async def get_forbidden_words_for_user(self, user_id: int) -> list[str]:
+        cache_data = await self.cache.get(self.CACHE_KEY)
         if cache_data is None:
-            cache_data = self._load_forbidden_words()
-            self.cache.set(self.CACHE_KEY, cache_data, ttl=self.TTL_SECONDS)
+            cache_data = await self._load_forbidden_words()
+            await self.cache.set(self.CACHE_KEY, cache_data, ttl=self.TTL_SECONDS)
 
         return cache_data.get(str(user_id), []) + cache_data.get("global", [])
 
-    def validate_message(self, message: str, user_id: int) -> bool:
+    async def validate_message(self, message: str, user_id: int) -> bool:
         cleaned_message = clean_content(message)
-        words = self.get_forbidden_words_for_user(user_id)
+        words = await self.get_forbidden_words_for_user(user_id)
         # print(f"Forbidden words for user {user_id}: {words}")
         validator = ForbiddenWordsValidator(words)
         return validator.validate(cleaned_message)
 
-    def ensure_message_is_valid(self, message: str, user_id: int):
+    async def ensure_message_is_valid(self, message: str, user_id: int):
         """Lanza excepción si el mensaje no es válido."""
-        if not self.validate_message(message, user_id):
+        if not await self.validate_message(message, user_id):
             raise ValueError(f"El Contenido base contiene palabras no autorizadas. {message}")
         
-    def ensure_dataframe_values_are_valid(self, df: pl.DataFrame, columns: list[str], user_id: int):
+    async def ensure_dataframe_values_are_valid(self, df: pl.DataFrame, columns: list[str], user_id: int):
         """
         Valida que ninguna palabra prohibida esté presente en las columnas especificadas.
         Usa comparación directa y única (sin regex), altamente eficiente.
         """
-        forbidden_words = set(word.lower() for word in self.get_forbidden_words_for_user(user_id) if word.strip())
+        forbidden_words = set(word.lower() for word in await self.get_forbidden_words_for_user(user_id) if word.strip())
         if not forbidden_words:
             return
 

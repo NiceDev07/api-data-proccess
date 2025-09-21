@@ -13,14 +13,14 @@ class RneService:
         self.rne_repository = rne_repository
         self.cache = cache
 
-    def __get_cache(self):
-        list_cache = self.cache.get(self.KEY_CACHE)
+    async def __get_cache(self):
+        list_cache = await self.cache.get(self.KEY_CACHE)
         if list_cache is None:
-            list_cache = set(self.rne_repository.get_black_list_crc())
+            list_cache = set(await self.rne_repository.get_black_list_crc())
             # self.cache.set(self.KEY_CACHE, list_cache, ttl=self.TTL_SECONDS) #!CORREGIR SERIALIZACION
         
         return list_cache
     
-    def get_list_rne(self):
-        return self.__get_cache()
+    async def get_list_rne(self):
+        return await self.__get_cache()
         

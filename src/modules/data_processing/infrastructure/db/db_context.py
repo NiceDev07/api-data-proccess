@@ -1,13 +1,12 @@
-# src/modules/data_processing/infrastructure/database/db_context.py
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 class DbContext:
     def __init__(
         self,
-        saem3: Session,
-        masivos_sms: Session,
-        portabilidad_db: Session
+        saem3: AsyncSession,
+        masivos_sms: AsyncSession,
+        portabilidad_db: AsyncSession
     ):
-        self.saem3: Session = saem3
-        self.masivos_sms: Session = masivos_sms
-        self.portabilidad_db: Session = portabilidad_db
+        self.saem3: AsyncSession = saem3
+        self.masivos_sms: AsyncSession = masivos_sms
+        self.portabilidad_db: AsyncSession = portabilidad_db

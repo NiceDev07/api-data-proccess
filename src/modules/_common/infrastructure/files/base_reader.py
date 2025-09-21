@@ -1,5 +1,5 @@
 import os
-from abc import ABC, abstractmethod
+from abc import ABC
 from modules._common.domain.interfaces.file_reader import IFileReader
 
 class BaseFileReader(IFileReader, ABC):

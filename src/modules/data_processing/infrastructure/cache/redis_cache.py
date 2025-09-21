@@ -1,16 +1,16 @@
 import json
-from redis import Redis
+from redis.asyncio import Redis
 from modules.data_processing.domain.interfaces.cache_interface import ICache
 
 class RedisCache(ICache):
     def __init__(self, client: Redis):
         self.client = client
 
-    def ping(self):
-        return self.client.ping()
+    async def ping(self):
+        return await self.client.ping()
 
-    def get(self, key: str):
-        raw = self.client.get(key)
+    async def get(self, key: str):
+        raw = await self.client.get(key)
         if not raw:
             return None  # Si no hay datos, devuelve None
 
@@ -21,8 +21,8 @@ class RedisCache(ICache):
             # Si no es JSON, devolver el texto plano
             return raw if isinstance(raw, bytes) else raw
 
-    def set(self, key: str, value, ttl: int = 3600):
-        self.client.setex(key, ttl, json.dumps(value))
+    async def set(self, key: str, value, ttl: int = 3600):
+       await self.client.setex(key, ttl, json.dumps(value))
 
-    def delete(self, key: str):
-        self.client.delete(key)
+    async def delete(self, key: str):
+        await self.client.delete(key)

@@ -16,9 +16,9 @@ class AssignCost(IPipeline):
         self.cols = cols
 
 
-    def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
+    async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
         phone_column = self.cols.number_concat
-        prefix_costs = self.cost_service.get_costs(ctx.rulesCountry.idCountry, ctx.tariffId, "sms")
+        prefix_costs = await self.cost_service.get_costs(ctx.rulesCountry.idCountry, ctx.tariffId, "sms")
 
         df = df.with_columns(pl.col(phone_column).cast(pl.Utf8))
         # Inicializar expresión de costo

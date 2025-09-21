@@ -1,4 +1,4 @@
-from redis import Redis
+from redis.asyncio import Redis
 from modules._common.infrastructure.files.file_reader_factory import FileReaderFactory
 from modules.data_processing.infrastructure.repositories.sql_forbidden_works import ForbiddenWordsRepository
 from modules.data_processing.infrastructure.cache.redis_cache import RedisCache
