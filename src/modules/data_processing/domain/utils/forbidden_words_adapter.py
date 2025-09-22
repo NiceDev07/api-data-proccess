@@ -21,8 +21,8 @@ class ForbiddenWordsCacheAdapter:
         user_word_map = defaultdict(list)
 
         for word, user_ids in self.raw_rows:
-            word_clean = word.strip().lower()
-            if not user_ids or user_ids.strip() == "":
+            word_clean = (word or "").strip().lower()
+            if not user_ids or (user_ids or "").strip() == "":
                 user_word_map["global"].append(word_clean)
             else:
                 for uid in user_ids.split(","):

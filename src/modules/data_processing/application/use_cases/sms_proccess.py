@@ -1,6 +1,5 @@
 import re
 import polars as pl
-from modules.data_processing.domain.services.cost_assigner import CostAssigner
 from modules.data_processing.application.schemas.preload_camp_schema import DataProcessingDTO
 from modules.data_processing.domain.policies.composition import CompositeCountryValidator
 from modules.data_processing.domain.policies.validate_policies import (CharacterSpecialPolicy, CharacterLimitPolicy)
@@ -74,6 +73,7 @@ class SMSUseCase:
         df = ConcatPrefix().execute(df, payload) # Paso 2: Concatenar código de país
         df = await AssignOperator(self.number_service).execute(df, payload) # Paso 5: Identificar operador del número
         df = await ExclutionRne(self.rne_service).execute(df, payload) # Paso 3.1: Obtener blacklist como set, Pasar como service con redis
+        
 
         if payload.configListExclusion:
             exclusion_column = payload.configListExclusion.nameColumnDemographic
@@ -103,8 +103,7 @@ class SMSUseCase:
             # Filtrar registros que NO estén en la lista de exclusión
             df = df.filter(~pl.col(number_column).is_in(exclusion_values))
 
-        df = await AssignOperator(self.number_service).execute(df, payload) # Paso 5: Identificar operador del número
-
+        
         df = CustomMessage(
             template_polars=template_polars,
             ordered_tags=ordered_tags,
@@ -113,7 +112,27 @@ class SMSUseCase:
         df = CalculatePDU().execute(df, payload)
         df = await AssignCost(self.cost_service, self.cols).execute(df, payload)
         df = CaculateCredits().execute(df, payload)
-        # df.write_parquet("resultados/test.parquet", compression="zstd")
+
+        df =  df.with_columns(
+            pl.lit('P').alias(self.cols.status)
+        )
+
+        n = df.height
+        df = df.with_columns(
+            ((pl.arange(0, n) % 100) + 1).alias(self.cols.service)
+        )
+
+        cols_save = [
+            self.cols.number_concat,
+            self.cols.status, # No la tenemos
+            self.cols.message,
+            self.cols.number_operator,
+            self.cols.pdu,
+            self.cols.credits,
+            self.cols.service
+        ]
+
+        df[cols_save].write_parquet("resultados/test_real.parquet", compression="zstd")
         return { 'success': True }
     
 # print(df[['__number_concat__', '__message__', '__credits__', '__pdu_total__', '__is_character_special__', '__length__']].head(10))
@@ -128,10 +147,6 @@ class SMSUseCase:
         # - Valida que el contido tenga una URL
         # - Agrega una url acortada al mensaje
         # - Se debe calcular el costo del mensaje
-
-
-
-
 
     # #Filtrar por los que superen el limite de caracteres
         # df_filter = df.filter(pl.col('__length__') > pl.when(pl.col("__is_character_special__")).then(pl.lit(rules_country.limit_character_special)).otherwise(pl.lit(rules_country.limit_character)))

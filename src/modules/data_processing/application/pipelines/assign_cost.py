@@ -32,4 +32,4 @@ class AssignCost(IPipeline):
                 .otherwise(costo_expr)
             )
 
-        return df.with_columns(costo_expr.alias("__cost__"), pl.lit(cost_operator).alias("__cost_operator__"))
+        return df.with_columns(costo_expr.alias(self.cols.cost), pl.lit(cost_operator).alias(self.cols.cost_operator))

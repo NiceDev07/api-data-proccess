@@ -9,14 +9,19 @@ class NumeracionRepository(INumeracionRepository):
         self.db_connection = db_numeracioon
 
     async def get_numeracion(self, country_id: int) -> List[Tuple[int, int, str]]:
-        stmt = (
-            select(
-                Numeracion.inicio,
-                Numeracion.fin,
-                Numeracion.operador
+        try:
+            stmt = (
+                select(
+                    Numeracion.inicio,
+                    Numeracion.fin,
+                    Numeracion.operador
+                )
+                .where(Numeracion.id_pais == country_id)
+                .order_by(Numeracion.inicio.asc())
             )
-            .where(Numeracion.id_pais == country_id)
-            .order_by(Numeracion.inicio.asc())
-        )
-        result = await self.db_connection.execute(stmt)
-        return result.all()   # devuelve lista de tuplas (inicio, fin, operador)
+            result = await self.db_connection.execute(stmt)  # <- await aquí
+            rows = result.all()
+            return rows                                       # List[Tuple[int,int,str]]
+        except Exception as e:
+            await self.db_connection.rollback()               # <- con await
+            raise ValueError("Error al obtener numeración") from e
