@@ -15,6 +15,7 @@ from modules.data_processing.application.pipelines.concat_prefix import ConcatPr
 from modules.data_processing.application.pipelines.exclusion_rne import ExclutionRne
 from modules.data_processing.application.pipelines.assign_operator import AssignOperator
 from modules.data_processing.application.pipelines.custom_message import CustomMessage
+from modules.data_processing.application.pipelines.validate_level import ValidateLevel
 from modules.data_processing.application.pipelines.caculate_pdu import CalculatePDU
 from modules.data_processing.application.pipelines.assign_cost import AssignCost
 from modules.data_processing.application.pipelines.calculate_credits import CaculateCredits
@@ -68,7 +69,8 @@ class SMSUseCase:
 
         number_column = payload.configFile.nameColumnDemographic
         # START: PROCESO BASE (Logica compartida):
-        # df = df.with_columns(pl.lit(True).alias("__eligible__"))
+        df = ValidateLevel().execute(df, payload) # Paso 1: Validar nivel de validación
+        df = df.with_columns(pl.lit(True).alias(self.cols.is_ok))
         df = CleanData().execute(df, payload) # Paso 1: Convertir a string y eliminar vacíos y nulos
         df = ConcatPrefix().execute(df, payload) # Paso 2: Concatenar código de país
         df = await AssignOperator(self.number_service).execute(df, payload) # Paso 5: Identificar operador del número
@@ -113,28 +115,32 @@ class SMSUseCase:
         df = await AssignCost(self.cost_service, self.cols).execute(df, payload)
         df = CaculateCredits().execute(df, payload)
 
-        df =  df.with_columns(
-            pl.lit('P').alias(self.cols.status)
-        )
 
-        n = df.height
-        df = df.with_columns(
-            ((pl.arange(0, n) % 100) + 1).alias(self.cols.service)
-        )
-
-        cols_save = [
-            self.cols.number_concat,
-            self.cols.status, # No la tenemos
-            self.cols.message,
-            self.cols.number_operator,
-            self.cols.pdu,
-            self.cols.credits,
-            self.cols.service
-        ]
-
-        df[cols_save].write_parquet("resultados/test_real.parquet", compression="zstd")
         return { 'success': True }
     
+
+        # df =  df.with_columns(
+        #     pl.lit('P').alias(self.cols.status)
+        # )
+
+        # n = df.height
+        # df = df.with_columns(
+        #     ((pl.arange(0, n) % 100) + 1).alias(self.cols.service)
+        # )
+
+        # cols_save = [
+        #     self.cols.number_concat,
+        #     self.cols.status, # No la tenemos
+        #     self.cols.message,
+        #     self.cols.number_operator,
+        #     self.cols.pdu,
+        #     self.cols.credits,
+        #     self.cols.service
+        # ]
+
+        # df[cols_save].write_parquet("resultados/test_real.parquet", compression="zstd")
+
+
 # print(df[['__number_concat__', '__message__', '__credits__', '__pdu_total__', '__is_character_special__', '__length__']].head(10))
         
         # Crear un archivo parquet listo para insercion masiva en la base de datos
