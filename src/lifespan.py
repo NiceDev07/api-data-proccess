@@ -7,6 +7,13 @@ from config.settings import settings  # type: ignore
 
 logger = logging.getLogger("uvicorn")
 
+common_engine_args = {
+    "pool_size": 10,
+    "max_overflow": 20,
+    "pool_pre_ping": True,
+    "pool_recycle": 1800,
+}
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- Startup ---
@@ -14,18 +21,15 @@ async def lifespan(app: FastAPI):
     engines = {
         "saem3": create_async_engine(
             settings.DB_SAEM3,
-            pool_size=10, max_overflow=20,
-            pool_pre_ping=True, pool_recycle=1800,
+            **common_engine_args           
         ),
         "portabilidad": create_async_engine(
             settings.DB_PORTABILIDAD,
-            pool_size=10, max_overflow=20,
-            pool_pre_ping=True, pool_recycle=1800,
+            **common_engine_args
         ),
         "masivos_sms": create_async_engine(
             settings.DB_MASIVOS_SMS,
-            pool_size=10, max_overflow=20,
-            pool_pre_ping=True, pool_recycle=1800,
+            **common_engine_args
         ),
     }
 

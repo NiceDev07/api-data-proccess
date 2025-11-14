@@ -29,11 +29,18 @@ async def preload_campaigns(
             content={"message": str(e)}
         )
     except Exception as e:
-        print(f"Unexpected error: {e}")
         return JSONResponse(
             status_code=500,
             content={"message": "An unexpected error occurred: " + str(e)}
         )
+    
+
+@router.post("/processing/{service}")
+async def process_data(
+    service: Literal["sms", "email", "call_blasting", "api_call"],
+    payload: DataProcessingDTO
+):
+    pass
 
 
 
