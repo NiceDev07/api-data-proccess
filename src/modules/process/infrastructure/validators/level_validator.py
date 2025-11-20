@@ -3,7 +3,7 @@ from modules.process.domain.models.process_dto import DataProcessingDTO
 import polars as pl
 
 class LevelValidator(IUserLevelValidator):
-    async def validate(self, df: pl.DataFrame, payload: DataProcessingDTO) -> None:
+    async def validate(self, df: pl.DataFrame, payload: DataProcessingDTO) -> pl.DataFrame:
         if payload.infoUserValidSend.levelUser > 1:
             return df
         
