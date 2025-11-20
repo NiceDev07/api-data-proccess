@@ -19,6 +19,7 @@ class CsvReader(IFileReader):
             df = pl.read_csv(
                 file_path,
                 separator=config.delimiter,
+                encoding='utf8',
                 has_header=config.useHeaders,
                 infer_schema_length=1000,   # más seguro para archivos medianos
                 ignore_errors=False

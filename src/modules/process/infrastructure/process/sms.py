@@ -12,10 +12,7 @@ class SmsProcessor(IDataProcessor):
         self.fileReaderfactory = fileReaderfactory
 
     async def process(self, payload: DataProcessingDTO) -> Dict[str, Any]:
-        file_reader = self.fileReaderfactory.create(payload.configFile)
-        # exclution_reader = self.fileReaderfactory.create(payload.configListExclusion)
-        file_result = await file_reader.read(payload.configFile)
-        # exclution_result = await exclution_reader.read(payload.configListExclusion)
+        file_result = await self.fileReaderfactory.create(payload.configFile.folder).read(payload.configFile)
 
         return {
             "status": "SMS processed",

@@ -1,24 +1,23 @@
 from modules.process.domain.enums.file import FileType
 from modules.process.infrastructure.files.csv_reader import CsvReader
 from modules.process.infrastructure.files.xlsx_reader import XlsxReader
-from modules.process.domain.models.process_dto import BaseFileConfig
+from modules.process.domain.interfaces.file_reader import IFileReader
 import os
 
 class ReaderFileFactory:
     def __init__(self):
         self._map = {
             FileType.csv: CsvReader,
-            FileType.xlsx: XlsxReader,  # Placeholder for XLSX reader
+            FileType.xlsx: XlsxReader,  # Placeholder for XLSX reader   
         }
     
     def _get_extension(self, file_name: str) -> str:
         _, ext = os.path.splitext(file_name.lower())
         return ext.replace(".", "")  # ".csv" -> "csv"
 
-    def create(self, file: BaseFileConfig):
-        ext = self._get_extension(file.folder)
-        print(f"Creating file reader for extension: {ext}")
+    def create(self, file: str) -> IFileReader:
+        ext = self._get_extension(file)
         cls = self._map.get(ext)
         if not cls:
-            raise ValueError(f"Servicio no soportado: {file.folder}")
+            raise ValueError(f"Servicio no soportado: {ext}")
         return cls()
