@@ -1,16 +1,26 @@
-from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from modules.data_processing.application.schemas.preload_camp_schema import DataProcessingDTO
 from modules.process.domain.enums.services import ServiceType 
-from modules.process.infrastructure.process.factory import ProcessorFactory
+from modules.process.app.process.factory import ProcessorFactory
 from modules._common.infrastructure.cache.redis import get_redis_client
 from modules.process.app.use_case.process import ProcessDataUseCase
+from modules.process.app.files.factory import ReaderFileFactory
+from modules.process.infrastructure.validators.level_validator import LevelValidator
 
 router = APIRouter()
 
-def get_factory(cache=Depends(get_redis_client)):
-    return ProcessorFactory(cache)
+def get_process_data_use_case() -> ProcessDataUseCase:
+    file_reader_factory = ReaderFileFactory()
+    level_validator = LevelValidator(max_records=10)
+    processor_factory = ProcessorFactory()
+
+    return ProcessDataUseCase(
+        file_reader_factory=file_reader_factory,
+        level_validator=level_validator,
+        processor_factory=processor_factory,
+    )
+
 
 @router.get("/health")
 async def health_check():
@@ -21,11 +31,10 @@ async def health_check():
 async def process_data(
     service: ServiceType,
     payload: DataProcessingDTO,
-    factory: ProcessorFactory = Depends(get_factory)
+    use_case: ProcessDataUseCase = Depends(get_process_data_use_case)
 ):
     try:
-        processor = factory.create(service)                 # infra
-        result = await ProcessDataUseCase(processor)(payload)   # application usa domain
+        result = await use_case(service, payload)
         return JSONResponse(status_code=200, content=result)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))

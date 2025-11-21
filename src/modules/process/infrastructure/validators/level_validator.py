@@ -16,6 +16,9 @@ class LevelValidator(IUserLevelValidator):
 
         number_col = payload.configFile.nameColumnDemographic
 
+        if number_col not in df.columns:
+            raise ValueError(f"Nivel 1: la columna '{number_col}' no existe en los datos.")
+        
         # 1) limitar a los primeros 10
         df = df.head(self.max_records)
 

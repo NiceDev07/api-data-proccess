@@ -15,6 +15,7 @@ class CsvReader(IFileReader):
         file_path = os.path.join(config.folder)
 
         # Leer CSV con polars
+        # ! TENER ENCUENTA QUE EL DELIMITADOR PUEDE SER DIFERENTE Y AUN SI LO LEE BIEN, PUEDE CAUSAR PROBLEMAS EN EL PROCESAMIENTO POSTERIOR
         try:
             df = pl.read_csv(
                 file_path,
@@ -24,6 +25,7 @@ class CsvReader(IFileReader):
                 infer_schema_length=1000,   # más seguro para archivos medianos
                 ignore_errors=False
             )
+
             return df
 
         except FileNotFoundError:

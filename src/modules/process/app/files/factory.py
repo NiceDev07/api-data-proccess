@@ -1,8 +1,8 @@
 from modules.process.domain.enums.file import FileType
-from modules.process.infrastructure.files.csv_reader import CsvReader
-from modules.process.infrastructure.files.xlsx_reader import XlsxReader
+from modules.process.app.files.csv_reader import CsvReader
+from modules.process.app.files.xlsx_reader import XlsxReader
 from modules.process.domain.interfaces.file_reader import IFileReader
-from modules.process.infrastructure.files.null_reader import NullReader
+from modules.process.app.files.null_reader import NullReader
 import os
 
 class ReaderFileFactory:
