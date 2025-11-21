@@ -3,6 +3,9 @@ from modules.process.domain.models.process_dto import DataProcessingDTO
 import polars as pl
 
 class LevelValidator(IUserLevelValidator):
+    def __init__(self, max_records = 10):
+        self.max_records = max_records
+
     async def validate(self, df: pl.DataFrame, payload: DataProcessingDTO) -> pl.DataFrame:
         if payload.infoUserValidSend.levelUser > 1:
             return df
@@ -14,7 +17,7 @@ class LevelValidator(IUserLevelValidator):
         number_col = payload.configFile.nameColumnDemographic
 
         # 1) limitar a los primeros 10
-        df = df.head(10)
+        df = df.head(self.max_records)
 
         # 2) normalizar: cast a texto y strip en el DF y en el target
         df = df.with_columns(

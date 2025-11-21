@@ -3,7 +3,7 @@ import polars as pl
 from ..schemas.preload_camp_schema import DataProcessingDTO
 from modules.data_processing.domain.constants.cols import Cols
 
-class CalculatePDU(IPipeline):
+class CalculateCost(IPipeline):
     def __init__(
         self,
         cols:Cols=Cols()
