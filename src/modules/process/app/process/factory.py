@@ -4,14 +4,11 @@ from modules.process.app.process.callblasting import CallBlastingProcess
 
 
 class ProcessorFactory:
-    def __init__(self):
-        self._map = {
-            ServiceType.sms: SmsProcessor,
-            ServiceType.call_blasting: CallBlastingProcess,
-        }
+    def __init__(self, processors: dict):
+        self._map = processors
 
     def create(self, service: ServiceType):
         cls = self._map.get(service)
         if not cls:
             raise ValueError(f"Servicio no soportado: {service}")
-        return cls()
+        return cls

@@ -39,6 +39,7 @@ async def lifespan(app: FastAPI):
         encoding="utf-8",
         decode_responses=True,
         max_connections=50,
+        db=0
     )
 
     # Health checks (fallar temprano si algo no conecta)

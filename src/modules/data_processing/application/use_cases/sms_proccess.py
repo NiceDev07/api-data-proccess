@@ -70,8 +70,8 @@ class SMSUseCase:
         number_column = payload.configFile.nameColumnDemographic
         # START: PROCESO BASE (Logica compartida):
         df = ValidateLevel().execute(df, payload) # Paso 1: Validar nivel de validación
-        #df = df.with_columns(pl.lit(True).alias(self.cols.is_ok))
         df = CleanData().execute(df, payload) # Paso 1: Convertir a string y eliminar vacíos y nulos
+        #df = df.with_columns(pl.lit(True).alias(self.cols.is_ok))
         df = ConcatPrefix().execute(df, payload) # Paso 2: Concatenar código de país
         df = await AssignOperator(self.number_service).execute(df, payload) # Paso 5: Identificar operador del número
         df = await ExclutionRne(self.rne_service).execute(df, payload) # Paso 3.1: Obtener blacklist como set, Pasar como service con redis

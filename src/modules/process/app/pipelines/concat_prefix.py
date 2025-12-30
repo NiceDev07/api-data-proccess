@@ -1,13 +1,10 @@
-from modules.data_processing.domain.interfaces.pipelines import IPipeline
+from modules.process.domain.interfaces.pipeline import IPipeline
 import polars as pl
-from ..schemas.preload_camp_schema import DataProcessingDTO
-from modules.data_processing.domain.constants.cols import Cols
+from modules.process.domain.constants.cols import Cols
+from modules.process.domain.models.process_dto import DataProcessingDTO
 
 class ConcatPrefix(IPipeline):
-    def __init__(self, cols: Cols = Cols()):
-        self.cols = cols
-
-    def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
+    async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
         c = ctx.configFile.nameColumnDemographic
 
         # prefijo como int
@@ -23,5 +20,5 @@ class ConcatPrefix(IPipeline):
             (
                 pl.lit(prefix_int, dtype=pl.Int64) * pl.lit(factor, dtype=pl.Int64)
                 + pl.col(c).cast(pl.Int64, strict=False)
-            ).alias(self.cols.number_concat)
+            ).alias(Cols.number_concat)
         )

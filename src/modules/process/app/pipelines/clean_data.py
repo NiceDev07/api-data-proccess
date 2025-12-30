@@ -1,9 +1,9 @@
-from modules.data_processing.domain.interfaces.pipelines import IPipeline
 import polars as pl
-from ..schemas.preload_camp_schema import DataProcessingDTO
+from modules.data_processing.domain.interfaces.pipelines import IPipeline
+from modules.process.domain.models.process_dto import DataProcessingDTO
 
 class CleanData(IPipeline):
-    def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
+    async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
         c = ctx.configFile.nameColumnDemographic
         MIN_DIGITS = max(ctx.rulesCountry.numberDigitsFixed, ctx.rulesCountry.numberDigitsMobile)
 

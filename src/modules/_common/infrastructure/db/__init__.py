@@ -10,7 +10,6 @@ def get_session_factory(db_name: str):
             yield session
     return _get_session
 
-# Ejemplos:
 get_db_saem3 = get_session_factory("saem3")
 get_db_portabilidad = get_session_factory("portabilidad")
 get_db_masivos_sms = get_session_factory("masivos_sms")

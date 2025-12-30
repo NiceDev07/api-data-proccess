@@ -1,6 +1,7 @@
-from src.modules.process.domain.interfaces.pipeline import IPipeline
-from src.modules.process.domain.interfaces.exclusion_source import IExclusionSource
 import polars as pl
+from modules.process.domain.models.process_dto import DataProcessingDTO
+from modules.process.domain.interfaces.pipeline import IPipeline
+from modules.process.domain.ports.exclusion_source import IExclusionSource
 
 class Exclution(IPipeline):
     def __init__(
@@ -10,10 +11,11 @@ class Exclution(IPipeline):
         self.exclusion_source = exclusion_source
 
     async def execute(
-        self,
-        df: pl.DataFrame
+        self, 
+        df: pl.DataFrame,
+        ctx: DataProcessingDTO
     ) -> pl.DataFrame:
-        numbers_to_exclude = await self.exclusion_source.get_numbers()
+        numbers_to_exclude = await self.exclusion_source.get_df(ctx)
 
         if not numbers_to_exclude:
             return df  # no excluye nada

@@ -8,8 +8,8 @@ import os
 class ReaderFileFactory:
     def __init__(self):
         self._map = {
-            FileType.csv: CsvReader,
-            FileType.xlsx: XlsxReader,  # Placeholder for XLSX reader   
+            FileType.csv: CsvReader(),
+            FileType.xlsx: XlsxReader(),  # Placeholder for XLSX reader   
         }
     
     def _get_extension(self, file_name: str) -> str:
@@ -24,4 +24,4 @@ class ReaderFileFactory:
         cls = self._map.get(ext)
         if not cls:
             raise ValueError(f"Servicio no soportado: {ext}")
-        return cls()
+        return cls
