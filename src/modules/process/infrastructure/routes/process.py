@@ -23,36 +23,23 @@ def get_process_data_use_case(
     file_reader_factory = ReaderFileFactory()
     level_validator = LevelValidator(max_records=10)
 
-
     numeration_service = NumerationService(
         NumeracionRepository(db_portabilidad),
         RedisCache(redis_client)
     )
-
     exclusion_source = CustomerExclusionSource(file_reader_factory)
-
     processors = {
         ServiceType.sms: SmsProcessor(
-                            numeration_service,
-                            exclusion_source
-                        ),
-        # ServiceType.call_blasting: CallBlastingProcess(),
+            numeration_service,
+            exclusion_source
+        ),
     }
-
     processor_factory = ProcessorFactory(processors)
-
-
     return ProcessDataUseCase(
         file_reader_factory=file_reader_factory,
         level_validator=level_validator,
         processor_factory=processor_factory
     )
-
-
-@router.get("/health")
-async def health_check():
-    return JSONResponse(status_code=200, content={"status": "ok"})
-
 
 @router.post("/processing/{service}")
 async def process_data(
@@ -69,3 +56,9 @@ async def process_data(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail="An unexpected error occurred: " + str(e))
+
+
+
+@router.get("/health")
+async def health_check():
+    return JSONResponse(status_code=200, content={"status": "ok"})

@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from modules.data_processing.infrastructure.routes.preload_camp import router as preload_router
+# from modules.data_processing.infrastructure.routes.preload_camp import router as preload_router
 from modules.process.infrastructure.routes.process import router as process_router
 from config.settings import settings
 from lifespan import lifespan

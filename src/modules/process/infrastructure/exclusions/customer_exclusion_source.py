@@ -11,5 +11,5 @@ class CustomerExclusionSource:
         df = await reader.read(ctx.configListExclusion)
         col = ctx.configListExclusion.nameColumnDemographic
 
-        return df.select(pl.col(col).alias("number")) # DEBE FUNCIONAR PARA MAIL
+        return df.select(pl.col(col).alias(col)) # DEBE FUNCIONAR PARA MAIL
 
