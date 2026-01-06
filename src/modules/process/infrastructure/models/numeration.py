@@ -1,7 +1,5 @@
 from sqlalchemy import Column, Integer, BigInteger, String
-from sqlalchemy.ext.declarative import declarative_base
-
-Base = declarative_base()
+from .base import Base
 
 class Numeracion(Base):
     __tablename__ = 'numeracion'
