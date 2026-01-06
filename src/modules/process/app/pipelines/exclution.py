@@ -35,8 +35,6 @@ class Exclution(IPipeline):
               .with_columns(pl.col(c).cast(pl.Int64, strict=False).alias(c))
         )
 
-        print("Excluding numbers count:", numbers_to_exclude)
-        print("From main DF count:", df)
         return df.filter(
             ~pl.col(colum_main).is_in(numbers_to_exclude.get_column(c))
         )

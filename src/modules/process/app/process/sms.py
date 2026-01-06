@@ -12,17 +12,21 @@ class SmsProcessor(IDataProcessor):
     ):
         normalizer = NumberNormalizer()
         self.steps = [
-            CleanData(normalizer),
-            Exclution(exclusion_source,normalizer), # DEBE LIMPIAR ANTES CLEAN DATA
-            ConcatPrefix(),
-            AssignOperator(numeration_service)
+            CleanData(normalizer), # Common
+            Exclution(exclusion_source,normalizer), # Common
+            AssignOperator(numeration_service), # Call and SMS
+            ConcatPrefix(), # Call and SMS
+            # AssignCost(), # Call and SMS
+            # CustomMessage() #Common
+            # Landig() # SMS
+            # ValidateRegulations() # Call and SMS 
+            # SaveResults() # Common
+            # Overview() # Common
         ]
 
     async def process(self, df: pl.DataFrame, payload: DataProcessingDTO) -> Dict[str, Any]:
-    
         for step in self.steps:
             df = await step.execute(df, payload)
-            print(df)
 
         return {
             "status": "SMS processed",
