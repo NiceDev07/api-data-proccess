@@ -15,27 +15,43 @@ class Exclution(IPipeline):
         
 
     async def execute(
-        self, 
+        self,
         df: pl.DataFrame,
         ctx: DataProcessingDTO
     ) -> pl.DataFrame:
+        from modules.process.domain.constants.cols import Cols
+        from modules.process.domain.constants.reasons import ExclusionReason
+
+        if not ctx.useExclusionList or ctx.configListExclusion is None:
+            return df.with_columns(
+                pl.lit(True).alias(Cols.is_ok),
+                pl.lit(None).cast(pl.Utf8).alias(Cols.error_code),
+            )
+
         c = ctx.configListExclusion.nameColumnDemographic
         colum_main = ctx.configFile.nameColumnDemographic
         numbers_to_exclude = await self.exclusion_source.get_df(ctx)
 
         if numbers_to_exclude.is_empty():
-            return df  # no excluye nada
+            return df.with_columns(
+                pl.lit(True).alias(Cols.is_ok),
+                pl.lit(None).cast(pl.Utf8).alias(Cols.error_code),
+            )
 
         cleaned = self.normalizer.normalize(c)
         numbers_to_exclude = (
             numbers_to_exclude.with_columns(cleaned)
-              .filter(
-                  pl.col(c).is_not_null()
-              )
+              .filter(pl.col(c).is_not_null())
               .with_columns(pl.col(c).cast(pl.Int64, strict=False).alias(c))
         )
 
-        return df.filter(
-            ~pl.col(colum_main).is_in(numbers_to_exclude.get_column(c))
+        exclusion_set = numbers_to_exclude.get_column(c)
+        is_excluded = pl.col(colum_main).is_in(exclusion_set)
+        return df.with_columns(
+            (~is_excluded).alias(Cols.is_ok),
+            pl.when(is_excluded)
+            .then(pl.lit(ExclusionReason.EXCLUSION_LIST))
+            .otherwise(pl.lit(None).cast(pl.Utf8))
+            .alias(Cols.error_code),
         )
     

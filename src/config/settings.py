@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     PORT: int = 8000
     HOST: str = "localhost"
     REPOSITORY_FILES_DIR: str = "/"
+    OUTPUT_DIR: str = "resultados"
 
     DB_SAEM3: str = "mysql+mysqlconnector://user:pass@host:port/database"
     DB_PORTABILIDAD: str = "mysql+mysqlconnector://user:pass@host:port/database"

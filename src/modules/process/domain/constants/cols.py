@@ -1,7 +1,7 @@
 from typing import Final
 
 class Cols:
-    number_concat: Final[str] = "__number_concat__"
+    number_concat: Final[str] = "__number_concat__" # SAVE ->
     message: Final[str] = "__message__"
     number_operator: Final[str] = "__number_operator__"
     cost_operator: Final[str] = "__cost_operator__"
@@ -18,3 +18,4 @@ class Cols:
     overhead: Final[str] = "__OVER_HEAD__"
     div: Final[str] = "__DIV__"
     is_ok: Final[str] = "__IS_OK__"
+    error_code: Final[str] = "__ERROR_CODE__"

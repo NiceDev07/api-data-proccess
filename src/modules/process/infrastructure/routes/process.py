@@ -9,29 +9,37 @@ from modules.process.infrastructure.validators.level_validator import LevelValid
 from modules.process.domain.enums.services import ServiceType
 from modules.process.app.process.sms import SmsProcessor
 from modules.process.app.services.numeration import NumerationService
+from modules.process.app.services.cost import CostService
 from modules.process.infrastructure.repositories.numeration import NumeracionRepository
+from modules.process.infrastructure.repositories.cost import CostRepository
 from modules._common.infrastructure.cache.redis import RedisCache, get_redis_client
-from modules._common.infrastructure.db import get_db_portabilidad
+from modules._common.infrastructure.db import get_db_portabilidad, get_db_saem3
 from modules.process.infrastructure.exclusions.customer_exclusion_source import CustomerExclusionSource
+from modules.process.infrastructure.storage.local import LocalStorage
 
 router = APIRouter()
 
 def get_process_data_use_case(
     redis_client=Depends(get_redis_client),
-    db_portabilidad=Depends(get_db_portabilidad)
+    db_portabilidad=Depends(get_db_portabilidad),
+    db_saem3=Depends(get_db_saem3),
 ) -> ProcessDataUseCase:
     file_reader_factory = ReaderFileFactory()
     level_validator = LevelValidator(max_records=10)
 
+    cache = RedisCache(redis_client)
     numeration_service = NumerationService(
         NumeracionRepository(db_portabilidad),
-        RedisCache(redis_client)
+        cache
     )
+    cost_service = CostService(CostRepository(db_saem3), cache)
     exclusion_source = CustomerExclusionSource(file_reader_factory)
     processors = {
         ServiceType.sms: SmsProcessor(
             numeration_service,
-            exclusion_source
+            exclusion_source,
+            cost_service,
+            LocalStorage(),
         ),
     }
     processor_factory = ProcessorFactory(processors)
