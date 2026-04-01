@@ -6,6 +6,7 @@ from modules.process.domain.interfaces.audio_duration_provider import IAudioDura
 from modules.process.domain.interfaces.pipeline import IPipeline
 from modules.process.domain.models.process_dto import DataProcessingDTO
 from modules.process.domain.constants.cols import Cols
+from modules.process.domain.constants.callblasting import OPERATION_MARGIN_SECS
 
 
 class CalculateDurationStandard(IPipeline):
@@ -32,5 +33,5 @@ class CalculateDurationStandard(IPipeline):
                 "Se requiere 'audioDuration' o 'audioPath' para call_blasting_standard."
             )
 
-        duration = max(1, math.ceil(seconds))
+        duration = max(1, math.ceil(seconds)) + OPERATION_MARGIN_SECS
         return df.with_columns(pl.lit(duration).cast(pl.Int32).alias(Cols.seconds))

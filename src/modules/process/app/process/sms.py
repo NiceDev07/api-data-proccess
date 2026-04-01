@@ -43,7 +43,6 @@ class SmsProcessor(IDataProcessor):
     async def process(self, df: pl.DataFrame, payload: DataProcessingDTO) -> Dict[str, Any]:
         for step in self.steps:
             df = await step.execute(df, payload)
-            print(df)
         return {"success": True, **self._build_summary(df).model_dump()}
 
     def _build_summary(self, df: pl.DataFrame) -> CampaignSummary:

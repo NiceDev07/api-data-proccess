@@ -79,6 +79,7 @@ class CallBlastingProcessor(IDataProcessor):
 
         for step in steps:
             df = await step.execute(df, payload)
+            print(df)
 
         return {"success": True, **self._build_summary(df).model_dump()}
 

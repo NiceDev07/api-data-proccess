@@ -10,7 +10,8 @@ class CalculateCreditsCallBlasting(IPipeline):
     Fórmula:
         si seconds > initial → cycles = ⌈seconds / incremental⌉
         si no               → cycles = initial   (mínimo de facturación)
-        credits = cycles × incremental × cost
+        cost_per_second = cost / 60  (cost viene por minuto desde DB)
+        credits = cycles × incremental × cost_per_second
     """
 
     async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
@@ -20,8 +21,11 @@ class CalculateCreditsCallBlasting(IPipeline):
             .otherwise(pl.col(Cols.initial))
         )
 
+        cost_per_second = pl.col(Cols.cost) / 60
+
         return df.with_columns(
-            (cycles * pl.col(Cols.incremental) * pl.col(Cols.cost))
+            (cycles * pl.col(Cols.incremental) * cost_per_second)
             .cast(pl.Float64)
+            .round(3)
             .alias(Cols.credits)
         )
