@@ -8,15 +8,16 @@ from modules.process.infrastructure.repositories.cost import ServiceKey
 
 class AssignCost(IPipeline):
     default_cost = 0.0
-    service: ServiceKey = "sms"
 
-    def __init__(self, cost_service: CostService):
+    def __init__(self, cost_service: CostService, service: ServiceKey | None = None):
         self.cost_service = cost_service
+        self._service = service  # None → use ctx.subService at runtime
 
     async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
         phone_column = Cols.number_concat
+        service = self._service if self._service is not None else ctx.subService
         prefix_costs = await self.cost_service.get_costs(
-            ctx.rulesCountry.idCountry, ctx.tariffId, self.service
+            ctx.rulesCountry.idCountry, ctx.tariffId, service
         )
 
         df = df.with_columns(pl.col(phone_column).cast(pl.Utf8))

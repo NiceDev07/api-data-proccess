@@ -1,5 +1,5 @@
 from modules._common.domain.interfaces.cache import ICache
-from modules.process.infrastructure.repositories.cost import ServiceKey
+from modules.process.infrastructure.repositories.cost import ServiceKey, CBServiceKey
 
 
 class CostService:
@@ -22,5 +22,17 @@ class CostService:
             return cached
 
         costs = await self.cost_repo.get_tariff_costs(country_id, tariff_id, service)
+        # self.cache.set(key, costs, self.TTL)
+        return costs
+
+    async def get_costs_cb(
+        self, country_id: int, tariff_id: int, service: CBServiceKey
+    ) -> list[tuple[str, float, str, float, float]]:
+        key = self._key(country_id, tariff_id, service) + ":cb"
+        cached = await self.cache.get(key)
+        if cached is not None:
+            return cached
+
+        costs = await self.cost_repo.get_tariff_costs_cb(country_id, tariff_id, service)
         # self.cache.set(key, costs, self.TTL)
         return costs

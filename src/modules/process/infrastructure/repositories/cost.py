@@ -3,7 +3,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from modules.process.infrastructure.models.tariffs import TelCost
 
-ServiceKey = Literal["sms", "call_blasting_standard", "call_blasting_custom", "email"]
+ServiceKey = Literal["sms", "email"]          # para get_tariff_costs (SMS / email)
+CBServiceKey = Literal["standard", "custom"]  # para get_tariff_costs_cb (call blasting)
 
 
 class CostRepository:
@@ -31,6 +32,37 @@ class CostRepository:
                 TelCost.prefix,
                 columns_map[service].label("cost"),
                 TelCost.operator.label("cost_operator"),
+            )
+            .where(TelCost.country_id == country_id)
+            .where(TelCost.tariff_id == tariff_id)
+        )
+
+        result = await self.session.execute(stmt)
+        rows = result.all()
+        return sorted(rows, key=lambda x: len(x[0]), reverse=True)
+
+    async def get_tariff_costs_cb(
+        self,
+        country_id: int,
+        tariff_id: int,
+        service: CBServiceKey,
+    ) -> list[tuple[str, float, str, float, float]]:
+        """Igual que get_tariff_costs pero incluye initial e incremental para call blasting."""
+        columns_map = {
+            "standard": TelCost.cb_standard,
+            "custom":   TelCost.cb_custom,
+        }
+
+        if service not in columns_map:
+            raise ValueError(f"Servicio no soportado para call blasting: {service}")
+
+        stmt = (
+            select(
+                TelCost.prefix,
+                columns_map[service].label("cost"),
+                TelCost.operator.label("cost_operator"),
+                TelCost.initial,
+                TelCost.incremental,
             )
             .where(TelCost.country_id == country_id)
             .where(TelCost.tariff_id == tariff_id)

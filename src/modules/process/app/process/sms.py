@@ -30,7 +30,7 @@ class SmsProcessor(IDataProcessor):
             Exclution(exclusion_source,normalizer), # Common
             AssignOperator(numeration_service), # Call and SMS
             ConcatPrefix(), # Call and SMS
-            AssignCost(cost_service), # Call and SMS
+            AssignCost(cost_service, service="sms"), # Call and SMS
             CustomMessage(), # Common
             Landing(), # SMS
             CalculatePDU(), # Common

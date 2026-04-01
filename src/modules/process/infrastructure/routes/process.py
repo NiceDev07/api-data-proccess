@@ -8,6 +8,7 @@ from modules.process.app.files.factory import ReaderFileFactory
 from modules.process.infrastructure.validators.level_validator import LevelValidator
 from modules.process.domain.enums.services import ServiceType
 from modules.process.app.process.sms import SmsProcessor
+from modules.process.app.process.callblasting import CallBlastingProcessor
 from modules.process.app.services.numeration import NumerationService
 from modules.process.app.services.cost import CostService
 from modules.process.infrastructure.repositories.numeration import NumeracionRepository
@@ -16,6 +17,7 @@ from modules._common.infrastructure.cache.redis import RedisCache, get_redis_cli
 from modules._common.infrastructure.db import get_db_portabilidad, get_db_saem3
 from modules.process.infrastructure.exclusions.customer_exclusion_source import CustomerExclusionSource
 from modules.process.infrastructure.storage.local import LocalStorage
+from modules.process.infrastructure.audio import FfprobeAudioDurationProvider
 
 router = APIRouter()
 
@@ -40,6 +42,13 @@ def get_process_data_use_case(
             exclusion_source,
             cost_service,
             LocalStorage(),
+        ),
+        ServiceType.call_blasting: CallBlastingProcessor(
+            numeration_service,
+            exclusion_source,
+            cost_service,
+            LocalStorage(),
+            duration_provider=FfprobeAudioDurationProvider(),  # cambiar a RemoteAudioDurationProvider() si el audio está en servidor externo
         ),
     }
     processor_factory = ProcessorFactory(processors)

@@ -134,7 +134,7 @@ def make_payload(**overrides) -> DataProcessingDTO:
         shortname="SAEM3",
         tariffId=1,
         campaignId=[999],
-        subService="sms_standard",
+        subService="standard",
         useExclusionList=False,
         configFile=BASE_CONFIG_FILE,
         rulesCountry=BASE_RULES,
