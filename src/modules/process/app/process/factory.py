@@ -1,6 +1,7 @@
 from modules.process.domain.enums.services import ServiceType
 from modules.process.app.process.sms import SmsProcessor
 from modules.process.app.process.callblasting import CallBlastingProcessor
+from modules.process.app.process.email import EmailProcessor
 
 
 class ProcessorFactory:

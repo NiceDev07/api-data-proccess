@@ -2,10 +2,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import create_async_engine
 import redis.asyncio as redis
-import logging
 from config.settings import settings  # type: ignore
+from logging_config import setup_logging, get_logger
 
-logger = logging.getLogger("uvicorn")
+setup_logging()
+logger = get_logger(__name__)
 
 common_engine_args = {
     "pool_size": 10,
@@ -68,9 +69,17 @@ async def lifespan(app: FastAPI):
                 logger.exception("Error cerrando engine %s tras fallo en startup", name)
         raise
 
+    # Construir dependencias compartidas del módulo process
+    from modules.process.infrastructure.deps import build_process_shared_deps
+    process_deps = build_process_shared_deps(
+        redis_client,
+        max_records_elevated=settings.MAX_CAMPAIGN_RECORDS,
+    )
+
     # Exponer en app.state SOLO si todo OK
     app.state.engines = engines
     app.state.redis = redis_client
+    app.state.process_deps = process_deps
 
     try:
         yield  # --- aquí corre la app ---

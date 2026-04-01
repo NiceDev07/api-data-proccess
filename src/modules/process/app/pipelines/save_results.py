@@ -4,6 +4,9 @@ from modules.process.domain.interfaces.pipeline import IPipeline
 from modules.process.domain.interfaces.storage import IStorage
 from modules.process.domain.models.process_dto import DataProcessingDTO
 from modules.process.domain.constants.cols import Cols
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class SaveResults(IPipeline):
@@ -15,5 +18,10 @@ class SaveResults(IPipeline):
 
     async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
         filename = f"{ctx.campaignId[0]}_{ctx.subService}_{uuid4().hex[:8]}.parquet"
-        await self.storage.save(df.select(self.cols + self._AUDIT_COLS), filename)
+        path = await self.storage.save(df.select(self.cols + self._AUDIT_COLS), filename)
+        valid_count = df.filter(pl.col(Cols.is_ok)).height
+        logger.info(
+            "Resultados guardados | archivo: %s | registros: %d | válidos: %d",
+            filename, df.height, valid_count,
+        )
         return df

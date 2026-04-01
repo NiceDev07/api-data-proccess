@@ -22,3 +22,4 @@ class Cols:
     div: Final[str] = "__DIV__"
     is_ok: Final[str] = "__IS_OK__"
     error_code: Final[str] = "__ERROR_CODE__"
+    email_domain: Final[str] = "__EMAIL_DOMAIN__"  # Email: dominio extraído (gmail.com, etc.)

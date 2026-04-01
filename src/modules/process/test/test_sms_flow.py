@@ -316,7 +316,7 @@ async def test_sms_flow_custom_message_tag():
 
 @pytest.mark.anyio
 async def test_sms_flow_char_limit_exceeded():
-    """Message exceeding limitCharacter raises ValueError from ValidateRegulations."""
+    """Messages exceeding limitCharacter are marked is_ok=False with CHAR_LIMIT_EXCEEDED."""
     processor = SmsProcessor(
         numeration_service=numeration_mock(),
         exclusion_source=exclusion_mock(),
@@ -331,13 +331,17 @@ async def test_sms_flow_char_limit_exceeded():
     payload = make_payload(content=long_content, rulesCountry=rules)
     df = await read_df(payload)
 
-    with pytest.raises(ValueError, match="límite de caracteres"):
-        await processor.process(df, payload)
+    result = await processor.process(df, payload)
+
+    violations = result.get("violations", [])
+    assert any(v["code"] == ExclusionReason.CHAR_LIMIT_EXCEEDED for v in violations), (
+        f"Se esperaba violación CHAR_LIMIT_EXCEEDED en violations: {violations}"
+    )
 
 
 @pytest.mark.anyio
 async def test_sms_flow_shortname_required():
-    """useShortName=True and shortname absent in content raises ValueError."""
+    """useShortName=True and shortname absent marks records is_ok=False with SHORTNAME_MISSING."""
     processor = SmsProcessor(
         numeration_service=numeration_mock(),
         exclusion_source=exclusion_mock(),
@@ -350,8 +354,12 @@ async def test_sms_flow_shortname_required():
     payload = make_payload(content="Mensaje sin shortname.", rulesCountry=rules)
     df = await read_df(payload)
 
-    with pytest.raises(ValueError, match="shortname"):
-        await processor.process(df, payload)
+    result = await processor.process(df, payload)
+
+    violations = result.get("violations", [])
+    assert any(v["code"] == ExclusionReason.SHORTNAME_MISSING for v in violations), (
+        f"Se esperaba violación SHORTNAME_MISSING en violations: {violations}"
+    )
 
 
 @pytest.mark.anyio

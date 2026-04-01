@@ -10,5 +10,5 @@ class ValidateRegulations(IPipeline):
 
     async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
         for regulation in self.regulations:
-            regulation.validate(df, ctx)
+            df = regulation.validate(df, ctx)
         return df

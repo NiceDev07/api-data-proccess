@@ -16,8 +16,10 @@ from modules.process.app.pipelines import (
     CalculateDurationStandard, CalculateDurationCustom,
     CustomMessage, CalculateCreditsCallBlasting, SaveResults,
 )
+from logging_config import get_logger
 
-# Columnas que se guardan por sub-servicio
+logger = get_logger(__name__)
+
 _OUTPUT_COLS: dict[CallBlastingSubService, list[str]] = {
     CallBlastingSubService.standard: [
         Cols.number_concat,
@@ -46,8 +48,7 @@ class CallBlastingProcessor(IDataProcessor):
     ):
         normalizer = NumberNormalizer()
 
-        # Pasos compartidos por todos los sub-servicios
-        common = [
+        common: list[IPipeline] = [
             CleanData(normalizer),
             Exclution(exclusion_source, normalizer),
             ValidatePhoneLength(),
@@ -56,8 +57,6 @@ class CallBlastingProcessor(IDataProcessor):
             AssignCostCallBlasting(cost_service),
         ]
 
-        # Registro: sub-servicio → pasos exclusivos
-        # Para agregar un nuevo sub-servicio: añadir una entrada aquí y en _OUTPUT_COLS
         self._pipelines: dict[CallBlastingSubService, list[IPipeline]] = {
             CallBlastingSubService.standard: common + [
                 CalculateDurationStandard(duration_provider),
@@ -77,11 +76,20 @@ class CallBlastingProcessor(IDataProcessor):
         if steps is None:
             raise ValueError(f"Sub-servicio de call blasting no soportado: {payload.subService}")
 
+        logger.info(
+            "CallBlasting [%s] iniciado | campaña: %s | registros: %d",
+            payload.subService, payload.campaignId, df.height,
+        )
         for step in steps:
             df = await step.execute(df, payload)
-            print(df)
 
-        return {"success": True, **self._build_summary(df).model_dump()}
+        summary = self._build_summary(df)
+        sg = summary.summaryGeneral
+        logger.info(
+            "CallBlasting completado | válidos: %d | excluidos: %d | segundos: %d | créditos: %.4f",
+            sg.total_records, sg.total_excluded, sg.total_seconds, sg.total_credits,
+        )
+        return {"success": True, **summary.model_dump()}
 
     def _build_summary(self, df: pl.DataFrame) -> CBCampaignSummary:
         valid = df.filter(pl.col(Cols.is_ok))

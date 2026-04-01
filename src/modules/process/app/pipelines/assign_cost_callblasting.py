@@ -6,7 +6,7 @@ from modules.process.app.services.cost import CostService
 
 
 class AssignCostCallBlasting(IPipeline):
-    """Asigna cost, cost_operator, initial e incremental desde CostRepository para call blasting."""
+    """Asigna cost, cost_operator, initial e incremental para call blasting."""
 
     default_cost = 0.0
 
@@ -18,23 +18,66 @@ class AssignCostCallBlasting(IPipeline):
             ctx.rulesCountry.idCountry, ctx.tariffId, ctx.subService
         )
 
+        if not rows:
+            return df.with_columns(
+                pl.lit(self.default_cost).alias(Cols.cost),
+                pl.lit("").alias(Cols.cost_operator),
+                pl.lit(self.default_cost).alias(Cols.initial),
+                pl.lit(self.default_cost).alias(Cols.incremental),
+            )
+
         df = df.with_columns(pl.col(Cols.number_concat).cast(pl.Utf8))
 
-        cost_expr        = pl.lit(self.default_cost)
-        operator_expr    = pl.lit("")
-        initial_expr     = pl.lit(self.default_cost)
-        incremental_expr = pl.lit(self.default_cost)
+        prefixes, costs, operators, initials, incrementals = zip(*rows)
+        lookup = (
+            pl.DataFrame({
+                "_prefix":      list(prefixes),
+                "_cost":        list(costs),
+                "_op":          list(operators),
+                "_initial":     list(initials),
+                "_incremental": list(incrementals),
+            })
+            .with_columns(pl.col("_prefix").str.len_chars().alias("_plen"))
+            .sort("_plen", descending=True)
+        )
 
-        for prefix, cost, operator, initial, incremental in reversed(rows):
-            cond = pl.col(Cols.number_concat).str.starts_with(prefix)
-            cost_expr        = pl.when(cond).then(pl.lit(cost)).otherwise(cost_expr)
-            operator_expr    = pl.when(cond).then(pl.lit(operator)).otherwise(operator_expr)
-            initial_expr     = pl.when(cond).then(pl.lit(initial)).otherwise(initial_expr)
-            incremental_expr = pl.when(cond).then(pl.lit(incremental)).otherwise(incremental_expr)
+        unique_lens: list[int] = lookup["_plen"].unique(maintain_order=True).to_list()
+        phone_col = Cols.number_concat
 
-        return df.with_columns(
-            cost_expr.alias(Cols.cost),
-            operator_expr.alias(Cols.cost_operator),
-            initial_expr.alias(Cols.initial),
-            incremental_expr.alias(Cols.incremental),
+        for plen in unique_lens:
+            subset = (
+                lookup.filter(pl.col("_plen") == plen)
+                .drop("_plen")
+                .rename({
+                    "_prefix":      f"_p{plen}",
+                    "_cost":        f"_c{plen}",
+                    "_op":          f"_o{plen}",
+                    "_initial":     f"_i{plen}",
+                    "_incremental": f"_inc{plen}",
+                })
+            )
+            df = (
+                df.with_columns(pl.col(phone_col).str.slice(0, plen).alias(f"_p{plen}"))
+                .join(subset, on=f"_p{plen}", how="left")
+                .drop(f"_p{plen}")
+            )
+
+        cost_cols = [f"_c{plen}"   for plen in unique_lens]
+        op_cols   = [f"_o{plen}"   for plen in unique_lens]
+        ini_cols  = [f"_i{plen}"   for plen in unique_lens]
+        inc_cols  = [f"_inc{plen}" for plen in unique_lens]
+
+        return (
+            df
+            .with_columns(
+                pl.coalesce([pl.col(c) for c in cost_cols] + [pl.lit(self.default_cost)])
+                .alias(Cols.cost),
+                pl.coalesce([pl.col(c) for c in op_cols] + [pl.lit("")])
+                .alias(Cols.cost_operator),
+                pl.coalesce([pl.col(c) for c in ini_cols] + [pl.lit(self.default_cost)])
+                .alias(Cols.initial),
+                pl.coalesce([pl.col(c) for c in inc_cols] + [pl.lit(self.default_cost)])
+                .alias(Cols.incremental),
+            )
+            .drop(cost_cols + op_cols + ini_cols + inc_cols)
         )

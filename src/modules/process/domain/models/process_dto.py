@@ -41,7 +41,7 @@ class DataProcessingDTO(BaseModel):
     campaignId: List[int]
     configFile: ConfigFile # Tener en cuenta para el hash
     useExclusionList: bool # Tener en cuenta para el hash
-    configListExclusion: ConfigListExclusion = None # Tener en cuenta para el hash
+    configListExclusion: Optional[ConfigListExclusion] = None # Tener en cuenta para el hash
     subService: str # Tener en cuenta para el hash
     rulesCountry: RulesCountry # Tener en cuenta para el hash
     infoUserValidSend: InfoUserValidSend # Tener en cuenta para el hash

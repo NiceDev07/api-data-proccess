@@ -22,7 +22,7 @@ class CostService:
             return cached
 
         costs = await self.cost_repo.get_tariff_costs(country_id, tariff_id, service)
-        # self.cache.set(key, costs, self.TTL)
+        await self.cache.set(key, costs, self.TTL)
         return costs
 
     async def get_costs_cb(
@@ -34,5 +34,5 @@ class CostService:
             return cached
 
         costs = await self.cost_repo.get_tariff_costs_cb(country_id, tariff_id, service)
-        # self.cache.set(key, costs, self.TTL)
+        await self.cache.set(key, costs, self.TTL)
         return costs

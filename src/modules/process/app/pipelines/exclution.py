@@ -3,6 +3,10 @@ from modules.process.domain.models.process_dto import DataProcessingDTO
 from modules.process.domain.interfaces.pipeline import IPipeline
 from modules.process.domain.ports.exclusion_source import IExclusionSource
 from modules.process.domain.interfaces.normalizer import INormalizer
+from logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 class Exclution(IPipeline):
     def __init__(
@@ -45,13 +49,17 @@ class Exclution(IPipeline):
               .with_columns(pl.col(c).cast(pl.Int64, strict=False).alias(c))
         )
 
-        exclusion_set = numbers_to_exclude.get_column(c)
+        exclusion_set = numbers_to_exclude.get_column(c).to_list()
         is_excluded = pl.col(colum_main).is_in(exclusion_set)
-        return df.with_columns(
+        result = df.with_columns(
             (~is_excluded).alias(Cols.is_ok),
             pl.when(is_excluded)
             .then(pl.lit(ExclusionReason.EXCLUSION_LIST))
             .otherwise(pl.lit(None).cast(pl.Utf8))
             .alias(Cols.error_code),
         )
+        excluded_count = result.filter(~pl.col(Cols.is_ok)).height
+        if excluded_count:
+            logger.info("Exclusión aplicada | %d registros excluidos por lista", excluded_count)
+        return result
     

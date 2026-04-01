@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     DB_MASIVOS_SMS: str = "mysql+mysqlconnector://user:pass@host:port/database"
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # Límite máximo de registros por campaña para usuarios de nivel > 1.
+    # Configurable por entorno; soporta hasta 1M+ ajustando este valor.
+    MAX_CAMPAIGN_RECORDS: int = 700_000
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore"  # Permite la existencia de variables extra

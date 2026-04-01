@@ -3,32 +3,32 @@ from modules.process.domain.interfaces.pipeline import IPipeline
 from modules.process.domain.models.process_dto import DataProcessingDTO
 from modules.process.domain.constants.cols import Cols
 from modules.process.app.services.cost import CostService
-from modules.process.infrastructure.repositories.cost import ServiceKey
 
 
-class AssignCost(IPipeline):
+class AssignCostEmail(IPipeline):
+    """Asigna cost y cost_operator para email según el dominio del correo.
+
+    Requiere que ExtractEmailDomain haya poblado Cols.email_domain antes de este paso.
+    Un prefijo vacío en la tabla de costos actúa como catch-all.
+    """
+
     default_cost = 0.0
 
-    def __init__(self, cost_service: CostService, service: ServiceKey | None = None):
-        self.cost_service = cost_service
-        self._service = service
+    def __init__(self, cost_service: CostService):
+        self._cost_service = cost_service
 
     async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
-        service = self._service if self._service is not None else ctx.subService
-        prefix_costs = await self.cost_service.get_costs(
-            ctx.rulesCountry.idCountry, ctx.tariffId, service
+        rows = await self._cost_service.get_costs(
+            ctx.rulesCountry.idCountry, ctx.tariffId, "email"
         )
 
-        if not prefix_costs:
+        if not rows:
             return df.with_columns(
                 pl.lit(self.default_cost).alias(Cols.cost),
                 pl.lit("").alias(Cols.cost_operator),
             )
 
-        phone_col = Cols.number_concat
-        df = df.with_columns(pl.col(phone_col).cast(pl.Utf8))
-
-        prefixes, costs, operators = zip(*prefix_costs)
+        prefixes, costs, operators = zip(*rows)
         lookup = (
             pl.DataFrame({
                 "_prefix": list(prefixes),
@@ -39,8 +39,8 @@ class AssignCost(IPipeline):
             .sort("_plen", descending=True)
         )
 
-        # Longitudes únicas de prefijo, de mayor a menor (primera coincidencia = más específica)
         unique_lens: list[int] = lookup["_plen"].unique(maintain_order=True).to_list()
+        domain_col = Cols.email_domain
 
         for plen in unique_lens:
             subset = (
@@ -49,7 +49,7 @@ class AssignCost(IPipeline):
                 .rename({"_prefix": f"_p{plen}", "_cost": f"_c{plen}", "_op": f"_o{plen}"})
             )
             df = (
-                df.with_columns(pl.col(phone_col).str.slice(0, plen).alias(f"_p{plen}"))
+                df.with_columns(pl.col(domain_col).str.slice(0, plen).alias(f"_p{plen}"))
                 .join(subset, on=f"_p{plen}", how="left")
                 .drop(f"_p{plen}")
             )

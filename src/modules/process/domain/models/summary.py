@@ -1,6 +1,14 @@
 from pydantic import BaseModel
 
 
+# ── Violaciones de regulación ─────────────────────────────────────────────────
+
+class RegulationViolation(BaseModel):
+    code: str
+    affected: int
+    description: str
+
+
 # ── SMS ──────────────────────────────────────────────────────────────────────
 
 class SummaryGroup(BaseModel):
@@ -21,6 +29,7 @@ class SummaryGeneral(BaseModel):
 class CampaignSummary(BaseModel):
     summaryGroup: list[SummaryGroup]
     summaryGeneral: SummaryGeneral
+    violations: list[RegulationViolation] = []
 
 
 # ── Call Blasting ─────────────────────────────────────────────────────────────
@@ -43,3 +52,23 @@ class CBSummaryGeneral(BaseModel):
 class CBCampaignSummary(BaseModel):
     summaryGroup: list[CBSummaryGroup]
     summaryGeneral: CBSummaryGeneral
+
+
+# ── Email ─────────────────────────────────────────────────────────────────────
+
+class EmailSummaryGroup(BaseModel):
+    domain: str
+    total: int
+    unit_value: float   # costo por registro
+    credits: float
+
+
+class EmailSummaryGeneral(BaseModel):
+    total_records: int
+    total_excluded: int  # excluidos por lista + registros inválidos (email mal formado)
+    total_credits: float
+
+
+class EmailCampaignSummary(BaseModel):
+    summaryGroup: list[EmailSummaryGroup]
+    summaryGeneral: EmailSummaryGeneral
