@@ -22,7 +22,6 @@ _EMAIL_COLS = [
     Cols.message,
     Cols.cost,
     Cols.credits,
-    Cols.cost_operator,
     Cols.email_domain,
 ]
 

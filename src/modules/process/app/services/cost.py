@@ -25,6 +25,19 @@ class CostService:
         await self.cache.set(key, costs, self.TTL)
         return costs
 
+    async def get_email_cost(
+        self, country_id: int, tariff_id: int
+    ) -> float | None:
+        key = self._key(country_id, tariff_id, "email") + ":single"
+        cached = await self.cache.get(key)
+        if cached is not None:
+            return cached
+
+        cost = await self.cost_repo.get_email_cost(country_id, tariff_id)
+        if cost is not None:
+            await self.cache.set(key, cost, self.TTL)
+        return cost
+
     async def get_costs_cb(
         self, country_id: int, tariff_id: int, service: CBServiceKey
     ) -> list[tuple[str, float, str, float, float]]:

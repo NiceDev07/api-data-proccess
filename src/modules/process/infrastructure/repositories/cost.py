@@ -41,6 +41,21 @@ class CostRepository:
         rows = result.all()
         return sorted(rows, key=lambda x: len(x[0]), reverse=True)
 
+    async def get_email_cost(
+        self,
+        country_id: int,
+        tariff_id: int,
+    ) -> float | None:
+        stmt = (
+            select(TelCost.email.label("cost"))
+            .where(TelCost.country_id == country_id)
+            .where(TelCost.tariff_id == tariff_id)
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        row = result.scalar_one_or_none()
+        return float(row) if row is not None else None
+
     async def get_tariff_costs_cb(
         self,
         country_id: int,
