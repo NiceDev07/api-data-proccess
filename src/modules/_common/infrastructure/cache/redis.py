@@ -2,6 +2,7 @@ from fastapi import Request
 import redis.asyncio as redis
 import json
 from dataclasses import is_dataclass, asdict
+from decimal import Decimal
 from typing import Any, Optional
 import redis.asyncio as redis
 from modules._common.domain.interfaces.cache import ICache
@@ -23,6 +24,9 @@ def _to_jsonable(value: Any) -> Any:
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
 
+    if isinstance(value, Decimal):
+        return float(value)
+
     if isinstance(value, (list, tuple)):
         return [_to_jsonable(v) for v in value]
 
@@ -42,6 +46,12 @@ def _to_jsonable(value: Any) -> Any:
 
     if hasattr(value, "to_dict") and callable(getattr(value, "to_dict")):
         return _to_jsonable(value.to_dict())
+
+    # Iterable genérico (ej: SQLAlchemy Row, que no es subclase de tuple)
+    try:
+        return [_to_jsonable(v) for v in value]
+    except TypeError:
+        pass
 
     # Fallback (no romper negocio)
     return str(value)
