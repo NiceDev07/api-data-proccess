@@ -61,13 +61,13 @@ class CallBlastingProcessor(IDataProcessor):
             CallBlastingSubService.standard: common + [
                 CalculateDurationStandard(duration_provider),
                 CalculateCreditsCallBlasting(),
-                SaveResults(_OUTPUT_COLS[CallBlastingSubService.standard], storage),
+                SaveResults(_OUTPUT_COLS[CallBlastingSubService.standard], storage, service="CallBlasting"),
             ],
             CallBlastingSubService.custom: common + [
                 CustomMessage(),
                 CalculateDurationCustom(),
                 CalculateCreditsCallBlasting(),
-                SaveResults(_OUTPUT_COLS[CallBlastingSubService.custom], storage),
+                SaveResults(_OUTPUT_COLS[CallBlastingSubService.custom], storage, service="CallBlasting"),
             ],
         }
 

@@ -48,7 +48,7 @@ class EmailProcessor(IDataProcessor):
             AssignCostEmail(cost_service),
             CustomMessage(),
             CalculateCreditsEmail(),
-            SaveResults(_EMAIL_COLS, storage),
+            SaveResults(_EMAIL_COLS, storage, service="email"),
         ]
 
     async def process(self, df: pl.DataFrame, payload: DataProcessingDTO) -> Dict[str, Any]:

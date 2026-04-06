@@ -1,4 +1,3 @@
-from uuid import uuid4
 import polars as pl
 from modules.process.domain.interfaces.pipeline import IPipeline
 from modules.process.domain.interfaces.storage import IStorage
@@ -12,12 +11,14 @@ logger = get_logger(__name__)
 class SaveResults(IPipeline):
     _AUDIT_COLS = [Cols.is_ok, Cols.error_code]
 
-    def __init__(self, cols: list[str], storage: IStorage):
+    def __init__(self, cols: list[str], storage: IStorage, service: str):
         self.cols = cols
         self.storage = storage
+        self.service = service
 
     async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
-        filename = f"{ctx.campaignId[0]}_{ctx.subService}_{uuid4().hex[:8]}.parquet"
+        cid = "-".join(str(c) for c in ctx.campaignId)
+        filename = f"Campaign/{self.service}/campaign_{cid}.parquet"
         path = await self.storage.save(df.select(self.cols + self._AUDIT_COLS), filename)
         valid_count = df.filter(pl.col(Cols.is_ok)).height
         logger.info(

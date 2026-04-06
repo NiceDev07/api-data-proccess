@@ -6,11 +6,11 @@ from config.settings import settings
 
 
 class LocalStorage(IStorage):
-    def __init__(self, output_dir: str = settings.OUTPUT_DIR):
-        self.output_dir = Path(output_dir)
+    def __init__(self, base_dir: str = settings.REPOSITORY_FILES_DIR):
+        self.base_dir = Path(base_dir)
 
     async def save(self, df: pl.DataFrame, filename: str) -> str:
-        path = self.output_dir / filename
+        path = self.base_dir / filename
         path.parent.mkdir(parents=True, exist_ok=True)
         await asyncio.to_thread(df.write_parquet, path, compression="zstd")
         return str(path)

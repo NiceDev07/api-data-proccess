@@ -50,7 +50,7 @@ class SmsProcessor(IDataProcessor):
             CalculatePDU(),
             ValidateRegulations(SMS_REGULATIONS),
             CalculateCredits(),
-            SaveResults(_SMS_COLS, storage),
+            SaveResults(_SMS_COLS, storage, service="sms"),
         ]
 
     async def process(self, df: pl.DataFrame, payload: DataProcessingDTO) -> Dict[str, Any]:
