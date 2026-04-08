@@ -1,13 +1,10 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
-
 from modules.process.domain.models.process_dto import DataProcessingDTO
+from modules.process.domain.models.confirm_dto import ConfirmRequest
 from modules.process.domain.enums.services import ServiceType
 from modules.process.infrastructure.deps import ProcessSharedDeps
-
-logger = logging.getLogger(__name__)
-
 from modules.process.app.process.factory import ProcessorFactory
 from modules.process.app.use_case.process import ProcessDataUseCase
 from modules.process.app.process.sms import SmsProcessor
@@ -18,13 +15,21 @@ from modules.process.app.services.cost import CostService
 from modules.process.infrastructure.repositories.numeration import NumeracionRepository
 from modules.process.infrastructure.repositories.cost import CostRepository
 from modules._common.infrastructure.db import get_db_portabilidad, get_db_saem3
+from modules.process.app.confirm.sms import SmsConfirmStrategy
+from modules.process.app.confirm.email import EmailConfirmStrategy
+from modules.process.app.confirm.call_blasting import CallBlastingConfirmStrategy
+from modules.process.app.confirm.factory import ConfirmFactory
+from modules.process.infrastructure.repositories.sms_confirm import SmsConfirmRepository
+from modules.process.infrastructure.repositories.email_confirm import EmailConfirmRepository
+from modules._common.infrastructure.db import get_db_telefonos_campanas
+from config.settings import settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-
 def get_shared_deps(request: Request) -> ProcessSharedDeps:
     return request.app.state.process_deps
-
 
 def get_use_case(
     shared: ProcessSharedDeps = Depends(get_shared_deps),
@@ -53,7 +58,6 @@ def get_use_case(
         processor_factory=ProcessorFactory(processors),
     )
 
-
 @router.post("/processing/{service}")
 async def process_data(
     service: ServiceType,
@@ -69,6 +73,58 @@ async def process_data(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception:
         logger.exception("Error inesperado procesando servicio '%s'", service)
+        raise HTTPException(status_code=500, detail="Error interno del servidor.")
+
+def get_confirm_factory(
+    shared: ProcessSharedDeps = Depends(get_shared_deps),
+    db_telefonos_campanas=Depends(get_db_telefonos_campanas),
+) -> ConfirmFactory:
+    return ConfirmFactory({
+        ServiceType.sms: SmsConfirmStrategy(
+            SmsConfirmRepository(db_telefonos_campanas, settings.DB_TELEFONOS_CAMPANAS), shared.storage
+        ),
+        ServiceType.email: EmailConfirmStrategy(
+            EmailConfirmRepository(settings.DB_EMAIL), shared.storage
+        ),
+        ServiceType.call_blasting: CallBlastingConfirmStrategy(shared.storage),
+    })
+
+
+@router.post(
+    "/confirm/{service}",
+    summary="Confirmar envío de campaña",
+    description=(
+        "Confirma el envío de una o más campañas para el servicio indicado. "
+        "El `service` puede ser `sms`, `email` o `call_blasting`."
+    ),
+    responses={
+        200: {"description": "Campañas confirmadas exitosamente."},
+        400: {"description": "Servicio no soportado o datos inválidos."},
+        500: {"description": "Error interno del servidor."},
+    },
+    tags=["Confirm Service"],
+)
+async def confirm_campaign(
+    service: ServiceType,
+    payload: ConfirmRequest,
+    factory: ConfirmFactory = Depends(get_confirm_factory),
+):
+    """
+    Confirma el envío de campañas para el servicio especificado.
+
+    - **service**: tipo de servicio (`sms`, `email`, `call_blasting`)
+    - **campaignId**: lista con los IDs de las campañas a confirmar
+    """
+    try:
+        strategy = factory.get(service)
+        result = await strategy.confirm(payload.campaignId)
+        return JSONResponse(status_code=200, content=result)
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception:
+        logger.exception("Error inesperado confirmando servicio '%s'", service)
         raise HTTPException(status_code=500, detail="Error interno del servidor.")
 
 

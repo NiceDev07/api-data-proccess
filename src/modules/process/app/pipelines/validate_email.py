@@ -15,8 +15,7 @@ class ValidateEmail(IPipeline):
     """
 
     async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
-        c = ctx.configFile.nameColumnDemographic
-        is_valid = pl.col(c).str.contains(_EMAIL_RE)
+        is_valid = pl.col(Cols.email).str.contains(_EMAIL_RE)
         to_invalidate = pl.col(Cols.is_ok) & ~is_valid
 
         return df.with_columns(

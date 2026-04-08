@@ -73,6 +73,7 @@ class AnalysisStorage(IStorage):
 
     async def save(self, df: pl.DataFrame, filename: str) -> str:
         path = self.out / filename
+        path.parent.mkdir(parents=True, exist_ok=True)
         df.write_parquet(path, compression="zstd")
         if _SAVE_RESULTS:
             df.write_csv(self.out / filename.replace(".parquet", ".csv"))
@@ -160,6 +161,7 @@ def make_ctx(
     audio_path:      str   | None = None,
     tariff_id:       int   = 1,
     campaign_id:     list[int] | None = None,
+    subject:         str   | None = None,
 ) -> DataProcessingDTO:
     return DataProcessingDTO(
         content=content,
@@ -174,6 +176,7 @@ def make_ctx(
         infoUserValidSend=InfoUserValidSend(levelUser=2, demographic=""),
         audioDuration=audio_duration,
         audioPath=audio_path,
+        subject=subject,
     )
 
 
@@ -208,11 +211,10 @@ def cb_cost_mock(rows: list[tuple] | None = None):
     return mock
 
 
-def email_cost_mock(rows: list[tuple] | None = None):
-    """(prefix, cost, operator) — prefijo vacío = catch-all."""
-    data = rows or [("gmail", 0.02, "GMAIL"), ("hotmail", 0.03, "HOTMAIL"), ("", 0.01, "OTHER")]
+def email_cost_mock(cost: float | None = None):
+    """Devuelve un costo plano para email."""
     mock = MagicMock()
-    mock.get_costs = AsyncMock(return_value=data)
+    mock.get_email_cost = AsyncMock(return_value=cost if cost is not None else 0.02)
     return mock
 
 
@@ -253,6 +255,6 @@ def base_email_df(emails: list[str] | None = None) -> pl.DataFrame:
     from modules.process.domain.constants.cols import Cols
     addrs = emails or ["user@gmail.com", "contact@hotmail.com"]
     return pl.DataFrame(
-        {"email": addrs, Cols.is_ok: [True] * len(addrs), Cols.error_code: [None] * len(addrs)},
-        schema={"email": pl.Utf8, Cols.is_ok: pl.Boolean, Cols.error_code: pl.Utf8},
+        {Cols.email: addrs, Cols.is_ok: [True] * len(addrs), Cols.error_code: [None] * len(addrs)},
+        schema={Cols.email: pl.Utf8, Cols.is_ok: pl.Boolean, Cols.error_code: pl.Utf8},
     )

@@ -300,24 +300,22 @@ class TestAssignCostCallBlasting:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestAssignCostEmail:
-    async def _run(self, domain: str, rows: list[tuple]) -> pl.DataFrame:
-        df = pl.DataFrame({Cols.email_domain: [domain]})
+    async def _run(self, cost: float) -> pl.DataFrame:
+        df = pl.DataFrame({Cols.email_domain: ["gmail.com"]})
         mock = MagicMock()
-        mock.get_costs = AsyncMock(return_value=rows)
+        mock.get_email_cost = AsyncMock(return_value=cost)
         return await AssignCostEmail(mock).execute(df, make_ctx())
 
     async def test_domain_prefix_match(self):
-        result = await self._run("gmail.com", [("gmail", 0.02, "GMAIL"), ("", 0.01, "DEFAULT")])
+        result = await self._run(0.02)
         assert result[Cols.cost][0] == pytest.approx(0.02)
-        assert result[Cols.cost_operator][0] == "GMAIL"
 
     async def test_catchall_empty_prefix(self):
-        result = await self._run("custom.org", [("gmail", 0.02, "GMAIL"), ("", 0.01, "DEFAULT")])
+        result = await self._run(0.01)
         assert result[Cols.cost][0] == pytest.approx(0.01)
-        assert result[Cols.cost_operator][0] == "DEFAULT"
 
     async def test_no_match_no_catchall_returns_default(self):
-        result = await self._run("custom.org", [("gmail", 0.02, "GMAIL")])
+        result = await self._run(0.0)
         assert result[Cols.cost][0] == pytest.approx(0.0)
 
 
@@ -443,17 +441,17 @@ class TestExtractEmailDomain:
     _ctx  = make_ctx(demographic="email")
 
     async def test_extracts_simple_domain(self):
-        df = pl.DataFrame({"email": ["user@gmail.com"]})
+        df = pl.DataFrame({Cols.email: ["user@gmail.com"]})
         result = await self._pipe.execute(df, self._ctx)
         assert result[Cols.email_domain][0] == "gmail.com"
 
     async def test_extracts_subdomain(self):
-        df = pl.DataFrame({"email": ["user@mail.company.org"]})
+        df = pl.DataFrame({Cols.email: ["user@mail.company.org"]})
         result = await self._pipe.execute(df, self._ctx)
         assert result[Cols.email_domain][0] == "mail.company.org"
 
     async def test_multiple_rows(self):
-        df = pl.DataFrame({"email": ["a@gmail.com", "b@hotmail.com"]})
+        df = pl.DataFrame({Cols.email: ["a@gmail.com", "b@hotmail.com"]})
         result = await self._pipe.execute(df, self._ctx)
         assert result[Cols.email_domain].to_list() == ["gmail.com", "hotmail.com"]
 
@@ -479,8 +477,8 @@ class TestValidateEmail:
 
     async def test_already_excluded_keeps_original_code(self):
         df = pl.DataFrame(
-            {"email": ["bad"], Cols.is_ok: [False], Cols.error_code: [ExclusionReason.EXCLUSION_LIST]},
-            schema={"email": pl.Utf8, Cols.is_ok: pl.Boolean, Cols.error_code: pl.Utf8},
+            {Cols.email: ["bad"], Cols.is_ok: [False], Cols.error_code: [ExclusionReason.EXCLUSION_LIST]},
+            schema={Cols.email: pl.Utf8, Cols.is_ok: pl.Boolean, Cols.error_code: pl.Utf8},
         )
         result = await self._pipe.execute(df, self._ctx)
         assert result[Cols.error_code][0] == ExclusionReason.EXCLUSION_LIST
@@ -507,7 +505,7 @@ class TestExclutionEmail:
         assert result[Cols.is_ok][0] is True
 
     async def test_excludes_matching_email(self):
-        df = pl.DataFrame({"email": ["bad@test.com", "good@test.com"]})
+        df = pl.DataFrame({Cols.email: ["bad@test.com", "good@test.com"]})
         excl_df = pl.DataFrame({"email": ["bad@test.com"]})
         mock = MagicMock()
         mock.get_df = AsyncMock(return_value=excl_df)

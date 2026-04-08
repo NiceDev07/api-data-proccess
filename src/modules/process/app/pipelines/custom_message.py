@@ -14,6 +14,7 @@ class CustomMessage(IPipeline):
             return df.with_columns(pl.lit(ctx.content).alias(Cols.message))
 
         template = _TAG_RE.sub("{}", ctx.content)
+        
         return df.with_columns(
             pl.format(template, *[pl.col(tag).cast(pl.Utf8) for tag in ordered_tags])
             .alias(Cols.message)

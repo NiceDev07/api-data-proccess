@@ -51,6 +51,7 @@ class AnalysisStorage(IStorage):
 
     async def save(self, df: pl.DataFrame, filename: str) -> str:
         path = self.out / filename
+        path.parent.mkdir(parents=True, exist_ok=True)
         df.write_parquet(path, compression="zstd")
         df.write_csv(self.out / filename.replace(".parquet", ".csv"))
         self.saved_dfs.append(df)

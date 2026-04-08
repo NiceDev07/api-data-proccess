@@ -45,6 +45,7 @@ class DataProcessingDTO(BaseModel):
     subService: str # Tener en cuenta para el hash
     rulesCountry: RulesCountry # Tener en cuenta para el hash
     infoUserValidSend: InfoUserValidSend # Tener en cuenta para el hash
+    subject: Optional[str] = None          # asunto del correo; obligatorio para email
     audioDuration: Optional[float] = None  # segundos; requerido en call_blasting_standard
     audioPath: Optional[str] = None        # ruta local o URL; alternativa a audioDuration
     # listBlockTerms: List[str] # YA DEBERIA APLICAR

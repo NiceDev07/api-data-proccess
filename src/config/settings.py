@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     DB_SAEM3: str = "mysql+mysqlconnector://user:pass@host:port/database"
     DB_PORTABILIDAD: str = "mysql+mysqlconnector://user:pass@host:port/database"
     DB_MASIVOS_SMS: str = "mysql+mysqlconnector://user:pass@host:port/database"
+    DB_TELEFONOS_CAMPANAS: str = "mysql+mysqlconnector://user:pass@host:port/database"
+    DB_EMAIL: str = "mysql+mysqlconnector://user:pass@host:port/database"
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # Límite máximo de registros por campaña para usuarios de nivel > 1.

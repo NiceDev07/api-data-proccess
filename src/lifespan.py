@@ -30,6 +30,17 @@ async def lifespan(app: FastAPI):
         ),
         "masivos_sms": create_async_engine(
             settings.DB_MASIVOS_SMS,
+            connect_args={"charset": "utf8mb4"},
+            **common_engine_args
+        ),
+        "telefonos_campanas": create_async_engine(
+            settings.DB_TELEFONOS_CAMPANAS,
+            connect_args={"charset": "utf8mb4"},
+            **common_engine_args
+        ),
+        "email": create_async_engine(
+            settings.DB_EMAIL,
+            connect_args={"charset": "utf8mb4"},
             **common_engine_args
         ),
     }

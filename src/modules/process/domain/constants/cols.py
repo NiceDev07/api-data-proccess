@@ -23,3 +23,5 @@ class Cols:
     is_ok: Final[str] = "__IS_OK__"
     error_code: Final[str] = "__ERROR_CODE__"
     email_domain: Final[str] = "__EMAIL_DOMAIN__"  # Email: dominio extraído (gmail.com, etc.)
+    email: Final[str] = "__EMAIL__"                # Email: dirección normalizada
+    subject: Final[str] = "__SUBJECT__"            # Email: asunto del correo

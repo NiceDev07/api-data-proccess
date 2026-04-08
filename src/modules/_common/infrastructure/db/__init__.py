@@ -13,3 +13,5 @@ def get_session_factory(db_name: str):
 get_db_saem3 = get_session_factory("saem3")
 get_db_portabilidad = get_session_factory("portabilidad")
 get_db_masivos_sms = get_session_factory("masivos_sms")
+get_db_telefonos_campanas = get_session_factory("telefonos_campanas")
+get_db_email = get_session_factory("email")

@@ -8,6 +8,7 @@ from modules.process.domain.models.summary import EmailCampaignSummary, EmailSum
 from modules.process.domain.constants.cols import Cols
 from modules.process.app.normalizers.email import EmailNormalizer
 from modules.process.app.pipelines import CustomMessage, SaveResults
+from modules.process.app.pipelines.custom_subject import CustomSubject
 from modules.process.app.pipelines.assign_cost_email import AssignCostEmail
 from modules.process.app.pipelines.calculate_credits_email import CalculateCreditsEmail
 from modules.process.app.pipelines.clean_data_email import CleanDataEmail
@@ -19,7 +20,9 @@ from logging_config import get_logger
 logger = get_logger(__name__)
 
 _EMAIL_COLS = [
+    Cols.email,
     Cols.message,
+    Cols.subject,
     Cols.cost,
     Cols.credits,
     Cols.email_domain,
@@ -39,24 +42,36 @@ _OTHER_DOMAIN = "others"
 class EmailProcessor(IDataProcessor):
     def __init__(self, exclusion_source, cost_service, storage: IStorage):
         normalizer = EmailNormalizer()
-        self.steps = [
+        # Pasos que necesitan materialización (filtros, exclusiones con .to_list())
+        self._pre_steps = [
             CleanDataEmail(normalizer),
             ExclutionEmail(exclusion_source, normalizer),
+        ]
+        # Pasos puros: solo with_columns — se ejecutan como cadena lazy
+        self._transform_steps = [
             ValidateEmail(),
             ExtractEmailDomain(),
             AssignCostEmail(cost_service),
             CustomMessage(),
+            CustomSubject(),
             CalculateCreditsEmail(),
-            SaveResults(_EMAIL_COLS, storage, service="email"),
         ]
+        self._save_step = SaveResults(_EMAIL_COLS, storage, service="email")
 
     async def process(self, df: pl.DataFrame, payload: DataProcessingDTO) -> Dict[str, Any]:
         logger.info(
             "Email iniciado | campaña: %s | registros: %d",
             payload.campaignId, df.height,
         )
-        for step in self.steps:
+        for step in self._pre_steps:
             df = await step.execute(df, payload)
+
+        # Cadena lazy: 6 with_columns sin materializar hasta SaveResults
+        lf = df.lazy()
+        for step in self._transform_steps:
+            lf = await step.execute(lf, payload)
+
+        df = await self._save_step.execute(lf, payload)
 
         summary = self._build_summary(df)
         sg = summary.summaryGeneral

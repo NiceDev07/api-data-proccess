@@ -16,7 +16,9 @@ class SaveResults(IPipeline):
         self.storage = storage
         self.service = service
 
-    async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
+    async def execute(self, df: pl.DataFrame | pl.LazyFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
+        if isinstance(df, pl.LazyFrame):
+            df = df.collect()
         cid = "-".join(str(c) for c in ctx.campaignId)
         filename = f"Campaign/{self.service}/campaign_{cid}.parquet"
         path = await self.storage.save(df.select(self.cols + self._AUDIT_COLS), filename)

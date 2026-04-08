@@ -22,7 +22,6 @@ class ExclutionEmail(IPipeline):
             )
 
         c = ctx.configListExclusion.nameColumnDemographic
-        col_main = ctx.configFile.nameColumnDemographic
         emails_to_exclude = await self.exclusion_source.get_df(ctx)
 
         if emails_to_exclude.is_empty():
@@ -38,7 +37,7 @@ class ExclutionEmail(IPipeline):
         )
 
         exclusion_set = emails_to_exclude.get_column(c).to_list()
-        is_excluded = pl.col(col_main).is_in(exclusion_set)
+        is_excluded = pl.col(Cols.email).is_in(exclusion_set)
 
         return df.with_columns(
             (~is_excluded).alias(Cols.is_ok),

@@ -2,6 +2,7 @@ import polars as pl
 from modules.process.domain.interfaces.pipeline import IPipeline
 from modules.process.domain.models.process_dto import DataProcessingDTO
 from modules.process.domain.interfaces.normalizer import INormalizer
+from modules.process.domain.constants.cols import Cols
 
 
 class CleanDataEmail(IPipeline):
@@ -15,4 +16,6 @@ class CleanDataEmail(IPipeline):
         return (
             df.with_columns(self.normalizer.normalize(c))
               .filter(pl.col(c).is_not_null())
+              .rename({c: Cols.email})
+              .with_columns(pl.col(Cols.email).alias(c))
         )
