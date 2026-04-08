@@ -38,15 +38,20 @@ class SmsConfirmStrategy(BaseConfirmStrategy):
         df = self._map_columns(df)
         df = self._add_computed_columns(df)
 
-        total = 0
+        # Table creation must be sequential (shared async session)
         for campaign_id in _campaign_ids:
             await self._repo.create_campaign_table(campaign_id)
-            total += await self._repo.bulk_insert(
+
+        # Bulk inserts are independent — run concurrently across campaigns
+        results = await asyncio.gather(*[
+            self._repo.bulk_insert(
                 campaign_id,
                 df.with_columns(pl.lit(campaign_id).alias("id_campana")),
             )
+            for campaign_id in _campaign_ids
+        ])
 
-        return {"inserted": total}
+        return {"inserted": sum(results)}
 
     def _map_columns(self, df: pl.DataFrame) -> pl.DataFrame:
         df = df.rename({k: v for k, v in _COL_MAP.items() if k in df.columns})

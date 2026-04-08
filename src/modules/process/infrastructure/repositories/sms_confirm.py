@@ -6,13 +6,14 @@ import tempfile
 
 import polars as pl
 from sqlalchemy import Table, Column, Integer, String, Text, Float, Enum, MetaData, insert, text, create_engine
+from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-# Below this threshold use multi-row VALUES INSERT; at or above use LOAD DATA LOCAL INFILE
-_LOAD_DATA_THRESHOLD = 50_000
-# Rows per INSERT ... VALUES (...) statement  — keeps parameter count well under MySQL's 65 535 limit
+# Rows >= threshold → LOAD DATA LOCAL INFILE; below → multi-row VALUES INSERT
+_LOAD_DATA_THRESHOLD = 10_000
+# Rows per INSERT ... VALUES (...) — keeps parameter count well under MySQL 65 535 limit
 _INSERT_CHUNK = 5_000
 
 _metadata = MetaData()
@@ -38,6 +39,27 @@ _CREATE_TABLE_SQL = """
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 """
 
+# Module-level engine cache keyed by DSN — shared across requests to avoid
+# creating/destroying a connection pool on every bulk_insert call.
+_ENGINE_CACHE: dict[str, Engine] = {}
+
+
+def _to_sync_dsn(dsn: str) -> str:
+    return re.sub(r"^mysql\+\w+://", "mysql+pymysql://", dsn)
+
+
+def _get_engine(dsn: str) -> Engine:
+    if dsn not in _ENGINE_CACHE:
+        _ENGINE_CACHE[dsn] = create_engine(
+            dsn,
+            pool_size=5,
+            max_overflow=5,
+            pool_pre_ping=True,
+            pool_recycle=3600,
+            connect_args={"local_infile": True},
+        )
+    return _ENGINE_CACHE[dsn]
+
 
 def _campaign_table(campaign_id: int) -> Table:
     return Table(
@@ -56,18 +78,12 @@ def _campaign_table(campaign_id: int) -> Table:
     )
 
 
-def _to_sync_dsn(dsn: str) -> str:
-    """Convert an async DSN to its sync pymysql counterpart for use in a thread."""
-    return re.sub(r"^mysql\+\w+://", "mysql+pymysql://", dsn)
-
-
 class SmsConfirmRepository:
     def __init__(self, session: AsyncSession, sync_dsn: str):
         self._session = session
         self._sync_dsn = _to_sync_dsn(sync_dsn)
 
     async def create_campaign_table(self, campaign_id: int) -> None:
-        # sql_notes=0 suppresses the "table already exists" warning from asyncmy
         await self._session.execute(text("SET sql_notes = 0"))
         await self._session.execute(text(_CREATE_TABLE_SQL.format(campaign_id=campaign_id)))
         await self._session.execute(text("SET sql_notes = 1"))
@@ -78,28 +94,12 @@ class SmsConfirmRepository:
             return 0
 
         if df.height >= _LOAD_DATA_THRESHOLD:
-            return await asyncio.to_thread(
-                self._sync_load_data, campaign_id, df
-            )
+            return await asyncio.to_thread(self._sync_load_data, campaign_id, df)
 
-        return await asyncio.to_thread(
-            self._sync_batch_insert, campaign_id, df
-        )
-
-    # ------------------------------------------------------------------
-    # All sync operations run in a thread via asyncio.to_thread.
-    # asyncmy (async driver) has issues with both LOAD DATA and bulk INSERT;
-    # mysqlconnector (sync) handles both correctly.
-    # ------------------------------------------------------------------
-
-    def _sync_engine(self):
-        return create_engine(
-            self._sync_dsn,
-            connect_args={"local_infile": True},
-        )
+        return await asyncio.to_thread(self._sync_batch_insert, campaign_id, df)
 
     def _sync_load_data(self, campaign_id: int, df: pl.DataFrame) -> int:
-        """LOAD DATA LOCAL INFILE — fastest path for >= 50 000 rows."""
+        """LOAD DATA LOCAL INFILE — fastest path for >= 10 000 rows."""
         tmp_fd, tmp_path = tempfile.mkstemp(suffix=".tsv")
         os.close(tmp_fd)
         try:
@@ -113,24 +113,20 @@ class SmsConfirmRepository:
                 f"FIELDS TERMINATED BY '\\t' OPTIONALLY ENCLOSED BY '\"' "
                 f"LINES TERMINATED BY '\\n' ({columns_str})"
             )
-            engine = self._sync_engine()
-            try:
-                with engine.begin() as conn:
-                    conn.execute(text(load_sql))
-            finally:
-                engine.dispose()
+            with _get_engine(self._sync_dsn).begin() as conn:
+                conn.execute(text(load_sql))
         finally:
             os.unlink(tmp_path)
         return df.height
 
     def _sync_batch_insert(self, campaign_id: int, df: pl.DataFrame) -> int:
-        """Multi-row VALUES INSERT — reliable path for < 50 000 rows."""
+        """Multi-row VALUES INSERT for < 10 000 rows."""
         table = _campaign_table(campaign_id)
-        engine = self._sync_engine()
-        try:
-            with engine.begin() as conn:
-                for chunk in df.iter_slices(_INSERT_CHUNK):
-                    conn.execute(insert(table).values(chunk.to_dicts()))
-        finally:
-            engine.dispose()
+        stmt = insert(table).prefix_with("IGNORE")
+        with _get_engine(self._sync_dsn).begin() as conn:
+            # Skip constraint checks — data is already validated upstream
+            conn.execute(text("SET SESSION unique_checks=0, foreign_key_checks=0"))
+            for chunk in df.iter_slices(_INSERT_CHUNK):
+                conn.execute(stmt, chunk.to_dicts())
+            conn.execute(text("SET SESSION unique_checks=1, foreign_key_checks=1"))
         return df.height
