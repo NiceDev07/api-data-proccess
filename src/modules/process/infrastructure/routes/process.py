@@ -14,15 +14,20 @@ from modules.process.app.services.numeration import NumerationService
 from modules.process.app.services.cost import CostService
 from modules.process.infrastructure.repositories.numeration import NumeracionRepository
 from modules.process.infrastructure.repositories.cost import CostRepository
-from modules._common.infrastructure.db import get_db_portabilidad, get_db_saem3
+from modules._common.infrastructure.db import (
+    get_db_portabilidad,
+    get_db_saem3,
+    get_db_telefonos_campanas,
+    get_sync_engine_campanas,
+    get_sync_engine_email,
+)
 from modules.process.app.confirm.sms import SmsConfirmStrategy
 from modules.process.app.confirm.email import EmailConfirmStrategy
 from modules.process.app.confirm.call_blasting import CallBlastingConfirmStrategy
 from modules.process.app.confirm.factory import ConfirmFactory
 from modules.process.infrastructure.repositories.sms_confirm import SmsConfirmRepository
 from modules.process.infrastructure.repositories.email_confirm import EmailConfirmRepository
-from modules._common.infrastructure.db import get_db_telefonos_campanas
-from config.settings import settings
+from sqlalchemy.engine import Engine
 
 logger = logging.getLogger(__name__)
 
@@ -78,13 +83,15 @@ async def process_data(
 def get_confirm_factory(
     shared: ProcessSharedDeps = Depends(get_shared_deps),
     db_telefonos_campanas=Depends(get_db_telefonos_campanas),
+    sync_engine_campanas: Engine = Depends(get_sync_engine_campanas),
+    sync_engine_email: Engine = Depends(get_sync_engine_email),
 ) -> ConfirmFactory:
     return ConfirmFactory({
         ServiceType.sms: SmsConfirmStrategy(
-            SmsConfirmRepository(db_telefonos_campanas, settings.DB_TELEFONOS_CAMPANAS), shared.storage
+            SmsConfirmRepository(db_telefonos_campanas, sync_engine_campanas), shared.storage
         ),
         ServiceType.email: EmailConfirmStrategy(
-            EmailConfirmRepository(settings.DB_EMAIL), shared.storage
+            EmailConfirmRepository(sync_engine_email), shared.storage
         ),
         ServiceType.call_blasting: CallBlastingConfirmStrategy(shared.storage),
     })
@@ -117,7 +124,7 @@ async def confirm_campaign(
     """
     try:
         strategy = factory.get(service)
-        result = await strategy.confirm(payload.campaignId)
+        result = await strategy.confirm(payload.campaignId, payload.codeGroup)
         return JSONResponse(status_code=200, content=result)
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
