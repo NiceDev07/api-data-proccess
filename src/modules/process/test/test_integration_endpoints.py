@@ -453,6 +453,7 @@ async def test_confirm_file_not_found(client: AsyncClient):
 # /confirm/sms — REAL DATABASE (campaign 99999191)
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skip(reason="requiere BD real — ejecutar manualmente con pytest -m realdb")
 @pytest.mark.anyio
 async def test_confirm_sms_real_db():
     """
@@ -525,6 +526,7 @@ async def test_confirm_sms_real_db():
 # /confirm/email — REAL DATABASE
 # ---------------------------------------------------------------------------
 
+@pytest.mark.skip(reason="requiere BD real — ejecutar manualmente con pytest -m realdb")
 @pytest.mark.anyio
 async def test_confirm_email_real_db(tmp_path: Path):
     """

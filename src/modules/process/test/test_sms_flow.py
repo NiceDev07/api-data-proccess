@@ -2,15 +2,12 @@
 Integration test for the full SMS pipeline.
 
 Runs SmsProcessor end-to-end against files/data.csv with mocked external
-services (numeration, cost, exclusion). Results are persisted in
-resultados/test_sms_flow/<scenario>/ for offline analysis.
+services (numeration, cost, exclusion). Uses conftest fixtures so no files
+are written to disk unless SAVE_TEST_RESULTS=1 is set.
 """
 
-import json
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
 
-import numpy as np
 import polars as pl
 import pytest
 
@@ -18,104 +15,24 @@ from modules.process.app.files.csv_reader import CsvReader
 from modules.process.app.process.sms import SmsProcessor
 from modules.process.domain.constants.cols import Cols
 from modules.process.domain.constants.reasons import ExclusionReason
-from modules.process.domain.interfaces.storage import IStorage
 from modules.process.domain.models.process_dto import (
     ConfigFile,
     ConfigListExclusion,
     DataProcessingDTO,
     InfoUserValidSend,
-    RulesCountry,
 )
 
-# ---------------------------------------------------------------------------
-# Paths
-# ---------------------------------------------------------------------------
+from .conftest import (
+    AnalysisStorage,
+    BASE_RULES_SMS,
+    cost_mock,
+    exclusion_mock,
+    numeration_mock,
+    save_summary,
+)
 
 PROJECT_ROOT = Path(__file__).parents[4]
 DATA_FILE = PROJECT_ROOT / "files" / "data.csv"
-RESULTS_DIR = PROJECT_ROOT / "resultados" / "test_sms_flow"
-
-# ---------------------------------------------------------------------------
-# Storage that saves results for analysis
-# ---------------------------------------------------------------------------
-
-
-class AnalysisStorage(IStorage):
-    """Saves parquet + human-readable CSV to RESULTS_DIR/<scenario>/."""
-
-    def __init__(self, scenario: str):
-        self.out = RESULTS_DIR / scenario
-        self.out.mkdir(parents=True, exist_ok=True)
-        self.saved_dfs: list[pl.DataFrame] = []
-        self.saved_paths: list[str] = []
-
-    async def save(self, df: pl.DataFrame, filename: str) -> str:
-        path = self.out / filename
-        path.parent.mkdir(parents=True, exist_ok=True)
-        df.write_parquet(path, compression="zstd")
-        df.write_csv(self.out / filename.replace(".parquet", ".csv"))
-        self.saved_dfs.append(df)
-        self.saved_paths.append(str(path))
-        return str(path)
-
-    def last_df(self) -> pl.DataFrame:
-        return self.saved_dfs[-1]
-
-
-# ---------------------------------------------------------------------------
-# Mock factories
-# ---------------------------------------------------------------------------
-
-
-def numeration_mock(
-    starts: list[int] | None = None,
-    ends: list[int] | None = None,
-    operators: list[str] | None = None,
-):
-    """Colombia operator ranges covering data.csv numbers (3005973563, 3208392650).
-    dtype must be fixed-width string (not object) so polars can write parquet.
-    """
-    s = np.array(starts or [3000000000, 3200000000], dtype=np.int64)
-    e = np.array(ends or [3099999999, 3299999999], dtype=np.int64)
-    o = np.array(operators or ["CLARO", "MOVISTAR"], dtype="U50")
-    mock = MagicMock()
-    mock.get_ranges = AsyncMock(return_value=(s, e, o))
-    return mock
-
-
-def cost_mock(costs: list[tuple] | None = None):
-    """Prefix-based cost for Colombia (+57) numbers.
-    After ConcatPrefix: 573005973563, 573208392650 → both start with '57'.
-    """
-    data = costs if costs is not None else [("57", 0.5, "COLOMBIA")]
-    mock = MagicMock()
-    mock.get_costs = AsyncMock(return_value=data)
-    return mock
-
-
-def exclusion_mock(numbers: list[int] | None = None, col: str = "number"):
-    """Returns a DF with the given numbers as the exclusion set (empty by default)."""
-    df = pl.DataFrame({col: numbers or []}, schema={col: pl.Int64})
-    mock = MagicMock()
-    mock.get_df = AsyncMock(return_value=df)
-    return mock
-
-
-# ---------------------------------------------------------------------------
-# DTO helpers
-# ---------------------------------------------------------------------------
-
-
-BASE_RULES = RulesCountry(
-    idCountry=57,           # Colombia
-    codeCountry=57,         # +57 prefix
-    numberDigitsMobile=10,  # Colombian mobile numbers are 10 digits
-    numberDigitsFixed=7,
-    useCharacterSpecial=True,
-    limitCharacter=160,
-    limitCharacterSpecial=70,
-    useShortName=False,
-)
 
 BASE_CONFIG_FILE = ConfigFile(
     folder=str(DATA_FILE),
@@ -138,7 +55,7 @@ def make_payload(**overrides) -> DataProcessingDTO:
         subService="standard",
         useExclusionList=False,
         configFile=BASE_CONFIG_FILE,
-        rulesCountry=BASE_RULES,
+        rulesCountry=BASE_RULES_SMS,
         infoUserValidSend=InfoUserValidSend(levelUser=2, demographic=""),
     )
     defaults.update(overrides)
@@ -147,9 +64,6 @@ def make_payload(**overrides) -> DataProcessingDTO:
 
 async def read_df(payload: DataProcessingDTO) -> pl.DataFrame:
     df = await CsvReader().read(payload.configFile)
-    # NOTE: No pipeline currently creates __IDENTIFIER__. The production use case
-    # will need an AssignIdentifier step. For now we simulate that step here so
-    # SaveResults can select the column without failing.
     if payload.configFile.userIdentifier and payload.configFile.nameColumnIdentifier:
         df = df.with_columns(
             pl.col(payload.configFile.nameColumnIdentifier)
@@ -169,11 +83,11 @@ async def read_df(payload: DataProcessingDTO) -> pl.DataFrame:
 @pytest.mark.anyio
 async def test_sms_flow_happy_path():
     """Both records pass every stage and produce a valid summary."""
-    scenario = "happy_path"
+    scenario = "sms_flow/happy_path"
     storage = AnalysisStorage(scenario)
     processor = SmsProcessor(
         numeration_service=numeration_mock(),
-        exclusion_source=exclusion_mock(),
+        exclusion_source=exclusion_mock(col="number"),
         cost_service=cost_mock(),
         storage=storage,
     )
@@ -181,18 +95,16 @@ async def test_sms_flow_happy_path():
     payload = make_payload()
     df = await read_df(payload)
     result = await processor.process(df, payload)
-
-    _save_summary(scenario, result)
+    save_summary(scenario, result)
 
     assert result["success"] is True
 
     general = result["summaryGeneral"]
     assert general["total_records"] == 2
     assert general["total_excluded"] == 0
-    assert general["total_pdu"] == 2        # 1 PDU each (40-char ASCII message)
+    assert general["total_pdu"] == 2
     assert abs(general["total_credits"] - 1.0) < 1e-6
 
-    # cost_mock uses a single "COLOMBIA" prefix → one group
     groups = result["summaryGroup"]
     assert len(groups) == 1
     grp = groups[0]
@@ -212,22 +124,21 @@ async def test_sms_flow_happy_path():
 @pytest.mark.anyio
 async def test_sms_flow_exclusion_list():
     """One number is in the exclusion list → marked excluded, one remains valid."""
-    scenario = "exclusion_list"
-    excluded_number = 3005973563   # first row in data.csv (national number after CleanData)
-
-    storage = AnalysisStorage(scenario)
+    scenario = "sms_flow/exclusion_list"
+    excluded_number = 3005973563
 
     excl_config = ConfigListExclusion(
-        folder=str(DATA_FILE),  # not actually read; source is mocked
+        folder=str(DATA_FILE),
         file="data.csv",
         delimiter=";",
         useHeaders=True,
         nameColumnDemographic="number",
     )
 
+    storage = AnalysisStorage(scenario)
     processor = SmsProcessor(
         numeration_service=numeration_mock(),
-        exclusion_source=exclusion_mock(numbers=[excluded_number]),
+        exclusion_source=exclusion_mock(numbers=[excluded_number], col="number"),
         cost_service=cost_mock(),
         storage=storage,
     )
@@ -235,8 +146,7 @@ async def test_sms_flow_exclusion_list():
     payload = make_payload(useExclusionList=True, configListExclusion=excl_config)
     df = await read_df(payload)
     result = await processor.process(df, payload)
-
-    _save_summary(scenario, result)
+    save_summary(scenario, result)
 
     general = result["summaryGeneral"]
     assert general["total_records"] == 1
@@ -247,7 +157,6 @@ async def test_sms_flow_exclusion_list():
 
     ok = saved.filter(pl.col(Cols.is_ok))
     nok = saved.filter(~pl.col(Cols.is_ok))
-
     assert len(ok) == 1
     assert len(nok) == 1
     assert nok[Cols.error_code][0] == ExclusionReason.EXCLUSION_LIST
@@ -255,20 +164,15 @@ async def test_sms_flow_exclusion_list():
 
 @pytest.mark.anyio
 async def test_sms_flow_no_operator_partial():
-    """Second number falls outside all operator ranges → excluded with NO_OPERATOR.
-    First number is valid so _build_summary does not raise.
-    """
-    scenario = "no_operator_partial"
-
-    # Covers 3005973563 (CLARO range) but NOT 3208392650 (outside range)
-    starts = [3000000000]
-    ends   = [3099999999]
-    ops    = ["CLARO"]
+    """Second number falls outside all operator ranges → excluded with NO_OPERATOR."""
+    scenario = "sms_flow/no_operator_partial"
 
     storage = AnalysisStorage(scenario)
     processor = SmsProcessor(
-        numeration_service=numeration_mock(starts, ends, ops),
-        exclusion_source=exclusion_mock(),
+        numeration_service=numeration_mock(
+            starts=[3000000000], ends=[3099999999], operators=["CLARO"]
+        ),
+        exclusion_source=exclusion_mock(col="number"),
         cost_service=cost_mock([("57", 0.5, "COLOMBIA")]),
         storage=storage,
     )
@@ -276,40 +180,35 @@ async def test_sms_flow_no_operator_partial():
     payload = make_payload()
     df = await read_df(payload)
     result = await processor.process(df, payload)
-
-    _save_summary(scenario, result)
+    save_summary(scenario, result)
 
     general = result["summaryGeneral"]
     assert general["total_records"] == 1
     assert general["total_excluded"] == 1
 
-    saved = storage.last_df()
-    nok = saved.filter(~pl.col(Cols.is_ok))
+    nok = storage.last_df().filter(~pl.col(Cols.is_ok))
     assert nok[Cols.error_code][0] == ExclusionReason.NO_OPERATOR
 
 
 @pytest.mark.anyio
 async def test_sms_flow_custom_message_tag():
     """Template tag {nombre} is replaced with data from the CSV column."""
-    scenario = "custom_message_tag"
+    scenario = "sms_flow/custom_message_tag"
     storage = AnalysisStorage(scenario)
     processor = SmsProcessor(
         numeration_service=numeration_mock(),
-        exclusion_source=exclusion_mock(),
+        exclusion_source=exclusion_mock(col="number"),
         cost_service=cost_mock(),
         storage=storage,
     )
 
-    # {nombre} tag → replaced by the 'nombre' column in data.csv
     payload = make_payload(content="Estimado {nombre}, su solicitud fue procesada.")
     df = await read_df(payload)
     result = await processor.process(df, payload)
-
-    _save_summary(scenario, result)
+    save_summary(scenario, result)
 
     saved = storage.last_df()
     messages = saved[Cols.message].to_list()
-    # 'nombre' column in data.csv has "esteban xde" and "otro"
     assert "esteban xde" in messages[0]
     assert "otro" in messages[1]
     assert result["success"] is True
@@ -318,20 +217,18 @@ async def test_sms_flow_custom_message_tag():
 @pytest.mark.anyio
 async def test_sms_flow_char_limit_exceeded():
     """Messages exceeding limitCharacter are marked is_ok=False with CHAR_LIMIT_EXCEEDED."""
+    from modules.process.domain.models.process_dto import RulesCountry
+
     processor = SmsProcessor(
         numeration_service=numeration_mock(),
-        exclusion_source=exclusion_mock(),
+        exclusion_source=exclusion_mock(col="number"),
         cost_service=cost_mock(),
-        storage=AnalysisStorage("char_limit_exceeded"),
+        storage=AnalysisStorage("sms_flow/char_limit_exceeded"),
     )
 
-    long_content = "A" * 161   # 1 char over the 160-char limit
-    rules = RulesCountry(
-        **{**BASE_RULES.model_dump(), "limitCharacter": 160, "useCharacterSpecial": False}
-    )
-    payload = make_payload(content=long_content, rulesCountry=rules)
+    rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "limitCharacter": 160, "useCharacterSpecial": False})
+    payload = make_payload(content="A" * 161, rulesCountry=rules)
     df = await read_df(payload)
-
     result = await processor.process(df, payload)
 
     violations = result.get("violations", [])
@@ -343,18 +240,18 @@ async def test_sms_flow_char_limit_exceeded():
 @pytest.mark.anyio
 async def test_sms_flow_shortname_required():
     """useShortName=True and shortname absent marks records is_ok=False with SHORTNAME_MISSING."""
+    from modules.process.domain.models.process_dto import RulesCountry
+
     processor = SmsProcessor(
         numeration_service=numeration_mock(),
-        exclusion_source=exclusion_mock(),
+        exclusion_source=exclusion_mock(col="number"),
         cost_service=cost_mock(),
-        storage=AnalysisStorage("shortname_required"),
+        storage=AnalysisStorage("sms_flow/shortname_required"),
     )
 
-    rules = RulesCountry(**{**BASE_RULES.model_dump(), "useShortName": True})
-    # content does NOT include the shortname "SAEM3"
+    rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "useShortName": True})
     payload = make_payload(content="Mensaje sin shortname.", rulesCountry=rules)
     df = await read_df(payload)
-
     result = await processor.process(df, payload)
 
     violations = result.get("violations", [])
@@ -365,12 +262,12 @@ async def test_sms_flow_shortname_required():
 
 @pytest.mark.anyio
 async def test_sms_flow_result_parquet_saved():
-    """Ensures the parquet file exists on disk with the expected columns."""
-    scenario = "result_parquet"
+    """Ensures the parquet file is accessible with the expected columns."""
+    scenario = "sms_flow/result_parquet"
     storage = AnalysisStorage(scenario)
     processor = SmsProcessor(
         numeration_service=numeration_mock(),
-        exclusion_source=exclusion_mock(),
+        exclusion_source=exclusion_mock(col="number"),
         cost_service=cost_mock(),
         storage=storage,
     )
@@ -379,25 +276,11 @@ async def test_sms_flow_result_parquet_saved():
     df = await read_df(payload)
     await processor.process(df, payload)
 
-    assert len(storage.saved_paths) == 1
-    parquet_path = Path(storage.saved_paths[0])
-    assert parquet_path.exists()
-    assert parquet_path.suffix == ".parquet"
-
-    loaded = pl.read_parquet(parquet_path)
-    assert Cols.number_concat in loaded.columns
-    assert Cols.message in loaded.columns
-    assert Cols.pdu in loaded.columns
-    assert Cols.credits in loaded.columns
-    assert Cols.is_ok in loaded.columns
-    assert len(loaded) == 2
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _save_summary(scenario: str, result: dict) -> None:
-    path = RESULTS_DIR / scenario / "summary.json"
-    path.write_text(json.dumps(result, indent=2, default=str))
+    assert len(storage.saved_dfs) == 1
+    saved = storage.last_df()
+    assert Cols.number_concat in saved.columns
+    assert Cols.message in saved.columns
+    assert Cols.pdu in saved.columns
+    assert Cols.credits in saved.columns
+    assert Cols.is_ok in saved.columns
+    assert len(saved) == 2
