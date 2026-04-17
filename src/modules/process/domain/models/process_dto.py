@@ -39,6 +39,7 @@ class DataProcessingDTO(BaseModel):
     shortname: str
     tariffId: int # Tener en cuenta para el hash
     campaignId: List[int]
+    codeGroup: Optional[str] = None
     configFile: ConfigFile # Tener en cuenta para el hash
     useExclusionList: bool # Tener en cuenta para el hash
     configListExclusion: Optional[ConfigListExclusion] = None # Tener en cuenta para el hash

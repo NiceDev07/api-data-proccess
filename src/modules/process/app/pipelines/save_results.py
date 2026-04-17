@@ -19,9 +19,9 @@ class SaveResults(IPipeline):
     async def execute(self, df: pl.DataFrame | pl.LazyFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
         if isinstance(df, pl.LazyFrame):
             df = df.collect()
-        cid = "-".join(str(c) for c in ctx.campaignId)
-        filename = f"Campaign/{self.service}/campaign_{cid}.parquet"
-        path = await self.storage.save(df.select(self.cols + self._AUDIT_COLS), filename)
+        key = ctx.codeGroup if ctx.codeGroup else "-".join(str(c) for c in ctx.campaignId)
+        filename = f"Campaign/{self.service}/campaign_{key}.parquet"
+        await self.storage.save(df.select(self.cols + self._AUDIT_COLS), filename)
         valid_count = df.filter(pl.col(Cols.is_ok)).height
         logger.info(
             "Resultados guardados | archivo: %s | registros: %d | válidos: %d",
