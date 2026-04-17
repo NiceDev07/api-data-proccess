@@ -1,22 +1,17 @@
 import asyncio
 import logging
 import os
-import re
 import tempfile
 
 import polars as pl
-from sqlalchemy import Table, Column, Integer, String, Text, Float, Enum, MetaData, insert, text, create_engine
+from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
-# Rows >= threshold → LOAD DATA LOCAL INFILE; below → multi-row VALUES INSERT
 _LOAD_DATA_THRESHOLD = 10_000
-# Rows per INSERT ... VALUES (...) — keeps parameter count well under MySQL 65 535 limit
 _INSERT_CHUNK = 5_000
-
-_metadata = MetaData()
 
 _CREATE_TABLE_SQL = """
     CREATE TABLE IF NOT EXISTS `campana_{campaign_id}` (
@@ -39,49 +34,16 @@ _CREATE_TABLE_SQL = """
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 """
 
-# Module-level engine cache keyed by DSN — shared across requests to avoid
-# creating/destroying a connection pool on every bulk_insert call.
-_ENGINE_CACHE: dict[str, Engine] = {}
-
-
-def _to_sync_dsn(dsn: str) -> str:
-    return re.sub(r"^mysql\+\w+://", "mysql+pymysql://", dsn)
-
-
-def _get_engine(dsn: str) -> Engine:
-    if dsn not in _ENGINE_CACHE:
-        _ENGINE_CACHE[dsn] = create_engine(
-            dsn,
-            pool_size=5,
-            max_overflow=5,
-            pool_pre_ping=True,
-            pool_recycle=3600,
-            connect_args={"local_infile": True},
-        )
-    return _ENGINE_CACHE[dsn]
-
-
-def _campaign_table(campaign_id: int) -> Table:
-    return Table(
-        f"campana_{campaign_id}",
-        _metadata,
-        Column("celular", String(18), nullable=False),
-        Column("id_campana", Integer, nullable=False),
-        Column("estado", Enum("C", "F", "P", "E", "B", "X", "A", "D"), nullable=False),
-        Column("texto", Text, nullable=False),
-        Column("identificacion", String(250), nullable=False),
-        Column("servicio", String(3), nullable=False),
-        Column("operador", String(40)),
-        Column("pdu", Integer, nullable=False),
-        Column("credit", Float, nullable=False),
-        extend_existing=True,
-    )
-
 
 class SmsConfirmRepository:
-    def __init__(self, session: AsyncSession, sync_dsn: str):
+    """
+    session  → async, para create_campaign_table (DDL ligero).
+    engine   → sync del lifespan, para bulk_insert (LOAD DATA / batch INSERT en threads).
+    """
+
+    def __init__(self, session: AsyncSession, engine: Engine):
         self._session = session
-        self._sync_dsn = _to_sync_dsn(sync_dsn)
+        self._engine = engine
 
     async def create_campaign_table(self, campaign_id: int) -> None:
         await self._session.execute(text("SET sql_notes = 0"))
@@ -98,8 +60,10 @@ class SmsConfirmRepository:
 
         return await asyncio.to_thread(self._sync_batch_insert, campaign_id, df)
 
+    # ── sync helpers (corren en asyncio.to_thread) ────────────────────────────
+
     def _sync_load_data(self, campaign_id: int, df: pl.DataFrame) -> int:
-        """LOAD DATA LOCAL INFILE — fastest path for >= 10 000 rows."""
+        """LOAD DATA LOCAL INFILE — vía más rápida para >= 10 000 filas."""
         tmp_fd, tmp_path = tempfile.mkstemp(suffix=".tsv")
         os.close(tmp_fd)
         try:
@@ -113,20 +77,24 @@ class SmsConfirmRepository:
                 f"FIELDS TERMINATED BY '\\t' OPTIONALLY ENCLOSED BY '\"' "
                 f"LINES TERMINATED BY '\\n' ({columns_str})"
             )
-            with _get_engine(self._sync_dsn).begin() as conn:
+            with self._engine.begin() as conn:
                 conn.execute(text(load_sql))
         finally:
             os.unlink(tmp_path)
         return df.height
 
     def _sync_batch_insert(self, campaign_id: int, df: pl.DataFrame) -> int:
-        """Multi-row VALUES INSERT for < 10 000 rows."""
-        table = _campaign_table(campaign_id)
-        stmt = insert(table).prefix_with("IGNORE")
-        with _get_engine(self._sync_dsn).begin() as conn:
-            # Skip constraint checks — data is already validated upstream
+        """INSERT IGNORE multi-fila para < 10 000 filas."""
+        rows = df.to_dicts()
+        cols = list(rows[0].keys())
+        cols_str = ", ".join(f"`{c}`" for c in cols)
+        bind_str = ", ".join(f":{c}" for c in cols)
+        stmt = text(
+            f"INSERT IGNORE INTO `campana_{campaign_id}` ({cols_str}) VALUES ({bind_str})"
+        )
+        with self._engine.begin() as conn:
             conn.execute(text("SET SESSION unique_checks=0, foreign_key_checks=0"))
-            for chunk in df.iter_slices(_INSERT_CHUNK):
-                conn.execute(stmt, chunk.to_dicts())
+            for i in range(0, len(rows), _INSERT_CHUNK):
+                conn.execute(stmt, rows[i : i + _INSERT_CHUNK])
             conn.execute(text("SET SESSION unique_checks=1, foreign_key_checks=1"))
         return df.height

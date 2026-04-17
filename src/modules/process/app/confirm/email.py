@@ -35,7 +35,7 @@ class EmailConfirmStrategy(BaseConfirmStrategy):
         df = self._map_columns(df)
         df = self._add_computed_columns(df)
 
-        await self._repo.assert_campaigns_exist(campaign_ids)
+        # await self._repo.assert_campaigns_exist(campaign_ids)
 
         total = 0
         for campaign_id in campaign_ids:
