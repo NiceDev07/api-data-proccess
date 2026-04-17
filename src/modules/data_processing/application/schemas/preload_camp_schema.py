@@ -37,6 +37,7 @@ class InfoUserValidSend(BaseModel):
 class DataProcessingDTO(BaseModel):
     content: str # Tener en cuenta para el hash
     shortname: str
+    codeGroup: Optional[str] = None
     tariffId: int # Tener en cuenta para el hash
     campaignId: List[int]
     configFile: ConfigFile # Tener en cuenta para el hash

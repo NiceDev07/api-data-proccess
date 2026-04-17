@@ -463,6 +463,8 @@ async def test_confirm_sms_real_db():
     - create_campaign_table → CREATE TABLE IF NOT EXISTS campana_99999191
     - bulk_insert → LOAD DATA LOCAL INFILE (>= 50k threshold)
     """
+    import re
+    from sqlalchemy import create_engine
     from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
     from sqlalchemy.orm import sessionmaker
     from config.settings import settings
@@ -485,19 +487,22 @@ async def test_confirm_sms_real_db():
         }
     )
 
-    engine = create_async_engine(settings.DB_TELEFONOS_CAMPANAS, pool_pre_ping=True)
-    AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    sync_dsn = re.sub(r"^mysql\+\w+://", "mysql+pymysql://", settings.DB_TELEFONOS_CAMPANAS)
+    sync_engine = create_engine(sync_dsn, pool_pre_ping=True, connect_args={"local_infile": True, "charset": "utf8mb4"})
+    async_engine = create_async_engine(settings.DB_TELEFONOS_CAMPANAS, pool_pre_ping=True)
+    AsyncSessionLocal = sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
 
     try:
         async with AsyncSessionLocal() as session:
-            repo = SmsConfirmRepository(session=session, sync_dsn=settings.DB_TELEFONOS_CAMPANAS)
+            repo = SmsConfirmRepository(session=session, engine=sync_engine)
             await repo.create_campaign_table(CAMPAIGN_ID)
 
             t0 = time.perf_counter()
             inserted = await repo.bulk_insert(CAMPAIGN_ID, df)
             elapsed = time.perf_counter() - t0
     finally:
-        await engine.dispose()
+        await async_engine.dispose()
+        sync_engine.dispose()
 
     _record("/confirm (real DB)", "sms", N_ROWS, elapsed)
 
@@ -517,105 +522,92 @@ async def test_confirm_sms_real_db():
 
 
 # ---------------------------------------------------------------------------
-# /confirm/email — REAL DATABASE (tabla mail_test)
+# /confirm/email — REAL DATABASE
 # ---------------------------------------------------------------------------
 
 @pytest.mark.anyio
-async def test_confirm_email_real_db():
+async def test_confirm_email_real_db(tmp_path: Path):
     """
-    Inserta 1 000 000 registros en mail_campaings.mail_test con
-    id_campaign=999999991.
+    Flujo completo: POST /v2/confirm/email → EmailConfirmStrategy
+    → EmailConfirmRepository → SP create_mail_table → LOAD DATA LOCAL INFILE.
 
-    Usa LOAD DATA LOCAL INFILE directamente (mismo mecanismo que
-    EmailConfirmRepository) apuntando a mail_test en vez de mail.
-    Crea mail_test si no existe (mismo esquema que mail).
+    - Parquet escrito en tmp_path (nunca toca resultados/).
+    - La SP crea mail_9999991919 en mail_campaings.
+    - 1 000 000 filas → rama LOAD DATA del repositorio.
     """
-    import asyncio
-    import os
     import re
-    import tempfile
-    from sqlalchemy import create_engine, text
+    from sqlalchemy import create_engine
+    from fastapi import FastAPI
+    from httpx import AsyncClient, ASGITransport
     from config.settings import settings
+    from modules.process.infrastructure.repositories.email_confirm import EmailConfirmRepository
+    from modules.process.app.confirm.email import EmailConfirmStrategy
+    from modules.process.app.confirm.call_blasting import CallBlastingConfirmStrategy
+    from modules.process.app.confirm.factory import ConfirmFactory
+    from modules.process.infrastructure.storage.local import LocalStorage
+    from modules.process.domain.enums.services import ServiceType
 
-    CAMPAIGN_ID = 999999991
+    # 99999191 cabe en MySQL INT (max 2 147 483 647) y no existe en producción
+    CAMPAIGN_ID = 99999191
     N_ROWS = 1_000_000
-    TARGET_TABLE = "mail_test"
 
-    _CREATE_MAIL_TEST = f"""
-        CREATE TABLE IF NOT EXISTS `mail_campaings`.`{TARGET_TABLE}` (
-            id          INT AUTO_INCREMENT PRIMARY KEY,
-            mail        VARCHAR(255) NOT NULL,
-            id_campaign INT NOT NULL,
-            id_client   VARCHAR(250),
-            status      VARCHAR(1) NOT NULL,
-            body        TEXT NOT NULL,
-            services    VARCHAR(3) NOT NULL,
-            subject     TEXT,
-            name_client VARCHAR(250)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-    """
+    # 1. Parquet en directorio temporal — sin escrituras a resultados/
+    parquet_path = tmp_path / "Campaign" / "email" / f"campaign_{CAMPAIGN_ID}.parquet"
+    _make_email_parquet(parquet_path, N_ROWS)
 
-    df = pl.DataFrame(
-        {
-            "mail":        [f"user{i}@gmail.com" for i in range(N_ROWS)],
-            "body":        ["<p>Hola</p>"] * N_ROWS,
-            "subject":     ["Asunto de prueba"] * N_ROWS,
-            "id_client":   [""] * N_ROWS,
-            "name_client": [""] * N_ROWS,
-            "status":      ["P"] * N_ROWS,
-            "services":    [str((i % 100) + 1) for i in range(N_ROWS)],
-        }
+    # 2. Sync engine real (mismo driver que el lifespan)
+    sync_dsn = re.sub(r"^mysql\+\w+://", "mysql+pymysql://", settings.DB_EMAIL)
+    sync_engine = create_engine(
+        sync_dsn,
+        pool_size=3,
+        max_overflow=2,
+        pool_pre_ping=True,
+        connect_args={"local_infile": True, "charset": "utf8mb4"},
     )
 
-    sync_dsn = re.sub(r"^mysql\+\w+://", "mysql+pymysql://", settings.DB_EMAIL)
+    # 3. App mínima: solo get_confirm_factory real; el resto no se invoca en /confirm
+    storage = LocalStorage(base_dir=str(tmp_path))
 
-    def _run() -> int:
-        engine = create_engine(sync_dsn, connect_args={"local_infile": True})
-        try:
-            with engine.begin() as conn:
-                conn.execute(text(_CREATE_MAIL_TEST))
+    def _real_confirm_factory():
+        return ConfirmFactory({
+            ServiceType.email: EmailConfirmStrategy(
+                repo=EmailConfirmRepository(engine=sync_engine),
+                storage=storage,
+            ),
+            ServiceType.sms: SmsConfirmStrategy(
+                repo=_sms_repo_mock(), storage=storage
+            ),
+            ServiceType.call_blasting: CallBlastingConfirmStrategy(storage=storage),
+        })
 
-            tmp_fd, tmp_path = tempfile.mkstemp(suffix=".tsv")
-            os.close(tmp_fd)
-            try:
-                columns_str = ", ".join(f"`{c}`" for c in df.columns)
-                df.write_csv(tmp_path, separator="\t", include_header=False, null_value="")
-                safe_path = tmp_path.replace("\\", "/")
-                load_sql = (
-                    f"LOAD DATA LOCAL INFILE '{safe_path}' "
-                    f"INTO TABLE `mail_campaings`.`{TARGET_TABLE}` "
-                    f"CHARACTER SET utf8mb4 "
-                    f"FIELDS TERMINATED BY '\\t' OPTIONALLY ENCLOSED BY '\"' "
-                    f"LINES TERMINATED BY '\\n' ({columns_str}) "
-                    f"SET id_campaign = {CAMPAIGN_ID}"
-                )
-                with engine.begin() as conn:
-                    conn.execute(text(load_sql))
-            finally:
-                os.unlink(tmp_path)
-        finally:
-            engine.dispose()
-        return df.height
-
-    t0 = time.perf_counter()
-    inserted = await asyncio.to_thread(_run)
-    elapsed = time.perf_counter() - t0
-
-    _record("/confirm (real DB)", "email", N_ROWS, elapsed)
+    app = FastAPI()
+    app.include_router(process_router, prefix="/v2")
+    app.dependency_overrides[get_confirm_factory] = _real_confirm_factory
 
     db_host = settings.DB_EMAIL.split("@")[-1].split("/")[0] if "@" in settings.DB_EMAIL else "configured host"
+
+    try:
+        t0 = time.perf_counter()
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post("/v2/confirm/email", json={"campaignId": [CAMPAIGN_ID]})
+        elapsed = time.perf_counter() - t0
+    finally:
+        sync_engine.dispose()
+
+    _record("/confirm (real DB)", "email", N_ROWS, elapsed)
 
     print(f"\n")
     print(f"  ┌─ INSERCIÓN REAL EN BASE DE DATOS — EMAIL ─────────────────────┐")
     print(f"  │  Host        : {db_host}")
     print(f"  │  Base        : mail_campaings")
-    print(f"  │  Tabla       : mail_campaings.{TARGET_TABLE}")
-    print(f"  │  id_campaign : {CAMPAIGN_ID}")
-    print(f"  │  Filas       : {inserted:,}")
+    print(f"  │  Tabla       : mail_campaings.mail_{CAMPAIGN_ID}")
+    print(f"  │  Filas       : {N_ROWS:,}")
     print(f"  │  Tiempo      : {elapsed * 1000:.1f} ms")
     print(f"  └────────────────────────────────────────────────────────────────┘")
 
-    assert inserted == N_ROWS
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["inserted"] == N_ROWS
 
 
 # ---------------------------------------------------------------------------
