@@ -13,6 +13,11 @@ class CleanDataEmail(IPipeline):
 
     async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
         c = ctx.configFile.nameColumnDemographic
+        if c not in df.columns:
+            raise ValueError(
+                f"La columna '{c}' no existe en el archivo. "
+                f"Columnas disponibles: {df.columns}"
+            )
         return (
             df.with_columns(self.normalizer.normalize(c))
               .filter(pl.col(c).is_not_null())
