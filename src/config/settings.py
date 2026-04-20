@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     PREFIX_APP: str = "/v2"
     ENV: EnvironmentEnum = EnvironmentEnum.dev.value
     PORT: int = 8000
-    HOST: str = "localhost"
+    HOST: str = "0.0.0.0"
     REPOSITORY_FILES_DIR: str = "/"
     OUTPUT_DIR: str = "resultados"
 
