@@ -1,7 +1,7 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
-from modules.process.domain.models.process_dto import DataProcessingDTO
+from modules.process.domain.models.process_dto import DataProcessingDTO, SmsDataProcessingDTO
 from modules.process.domain.models.confirm_dto import ConfirmRequest
 from modules.process.domain.enums.services import ServiceType
 from modules.process.infrastructure.deps import ProcessSharedDeps
@@ -63,10 +63,17 @@ def get_use_case(
         processor_factory=ProcessorFactory(processors),
     )
 
+async def _parse_payload(service: ServiceType, request: Request) -> DataProcessingDTO:
+    body = await request.json()
+    if service == ServiceType.sms:
+        return SmsDataProcessingDTO.model_validate(body)
+    return DataProcessingDTO.model_validate(body)
+
+
 @router.post("/processing/{service}")
 async def process_data(
     service: ServiceType,
-    payload: DataProcessingDTO,
+    payload: DataProcessingDTO = Depends(_parse_payload),
     use_case: ProcessDataUseCase = Depends(get_use_case),
 ):
     try:

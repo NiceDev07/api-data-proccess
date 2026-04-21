@@ -151,7 +151,7 @@ def make_excl_config(
 
 def make_ctx(
     content:         str   = "Mensaje de prueba.",
-    shortname:       str   = "TEST",
+    shortname:       str | None = None,
     sub_service:     str   = "standard",
     demographic:     str   = "phone",
     rules:           RulesCountry | None = None,

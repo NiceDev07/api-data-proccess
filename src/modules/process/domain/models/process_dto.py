@@ -36,7 +36,7 @@ class InfoUserValidSend(BaseModel):
 
 class DataProcessingDTO(BaseModel):
     content: str # Tener en cuenta para el hash
-    shortname: str
+    shortname: Optional[str] = None
     tariffId: int # Tener en cuenta para el hash
     campaignId: List[int]
     codeGroup: Optional[str] = None
@@ -51,3 +51,7 @@ class DataProcessingDTO(BaseModel):
     audioPath: Optional[str] = None        # ruta local o URL; alternativa a audioDuration
     # listBlockTerms: List[str] # YA DEBERIA APLICAR
     # listExclusionGeneral: List[str] # Ya no DBERIA APLICAR
+
+
+class SmsDataProcessingDTO(DataProcessingDTO):
+    shortname: str
