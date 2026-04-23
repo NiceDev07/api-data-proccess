@@ -21,8 +21,6 @@ class ProcessDataUseCase:
     ):
         processor = self.processor_factory.create(service)
         reader = self.reader_factory.create(payload.configFile.folder)
-        df = await reader.read(payload.configFile)
-        df = await self.level_validator.validate(df, payload) # Devuelve df con los 10 primeros validados, o el df completo si es nivel > 1
-      
-
-        return await processor.process(df, payload)
+        lf = await reader.read(payload.configFile)
+        lf = await self.level_validator.validate(lf, payload)
+        return await processor.process(lf, payload)

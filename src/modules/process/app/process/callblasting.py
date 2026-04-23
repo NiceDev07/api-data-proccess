@@ -71,11 +71,12 @@ class CallBlastingProcessor(IDataProcessor):
             ],
         }
 
-    async def process(self, df: pl.DataFrame, payload: DataProcessingDTO) -> Dict[str, Any]:
+    async def process(self, lf: pl.LazyFrame | pl.DataFrame, payload: DataProcessingDTO) -> Dict[str, Any]:
         steps = self._pipelines.get(payload.subService)
         if steps is None:
             raise ValueError(f"Sub-servicio de call blasting no soportado: {payload.subService}")
 
+        df = lf.collect(engine="streaming") if isinstance(lf, pl.LazyFrame) else lf
         logger.info(
             "CallBlasting [%s] iniciado | campaña: %s | registros: %d",
             payload.subService, payload.campaignId, df.height,

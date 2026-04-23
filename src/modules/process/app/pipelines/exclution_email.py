@@ -36,6 +36,7 @@ class ExclutionEmail(IPipeline):
             .filter(pl.col(c).is_not_null())
         )
 
+        # .implode() required: is_in(Series[same_dtype]) is ambiguous in Polars 1.31+
         exclusion_series = emails_to_exclude.get_column(c).implode()
         is_excluded = pl.col(Cols.email).is_in(exclusion_series)
 

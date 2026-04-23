@@ -18,7 +18,7 @@ class SaveResults(IPipeline):
 
     async def execute(self, df: pl.DataFrame | pl.LazyFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
         if isinstance(df, pl.LazyFrame):
-            df = df.collect()
+            df = df.collect(engine="streaming")
         key = ctx.codeGroup if ctx.codeGroup else "-".join(str(c) for c in ctx.campaignId)
         filename = f"Campaign/{self.service}/campaign_{key}.parquet"
         await self.storage.save(df.select(self.cols + self._AUDIT_COLS), filename)

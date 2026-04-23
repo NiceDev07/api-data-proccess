@@ -14,16 +14,21 @@ class CsvReader(IFileReader):
 
         file_path = os.path.join(config.folder)
 
-        try:
-            return await asyncio.to_thread(
-                pl.read_csv,
+        def _load() -> pl.LazyFrame:
+            # read_csv carga el archivo una sola vez en memoria; .lazy() envuelve
+            # el DataFrame para que toda la cadena de pasos corra como plan lazy
+            # y se materialice una única vez en SaveResults.collect(streaming).
+            return pl.read_csv(
                 file_path,
                 separator=config.delimiter,
-                encoding="utf8",
+                encoding="utf8-lossy",
                 has_header=config.useHeaders,
                 infer_schema_length=1000,
                 ignore_errors=False,
-            )
+            ).lazy()
+
+        try:
+            return await asyncio.to_thread(_load)
         except FileNotFoundError:
             raise FileNotFoundError(f"No se encontró el archivo CSV en: {file_path}")
         except UnicodeDecodeError:

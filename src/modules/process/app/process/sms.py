@@ -53,7 +53,8 @@ class SmsProcessor(IDataProcessor):
             SaveResults(_SMS_COLS, storage, service="sms"),
         ]
 
-    async def process(self, df: pl.DataFrame, payload: DataProcessingDTO) -> Dict[str, Any]:
+    async def process(self, lf: pl.LazyFrame | pl.DataFrame, payload: DataProcessingDTO) -> Dict[str, Any]:
+        df = lf.collect(engine="streaming") if isinstance(lf, pl.LazyFrame) else lf
         logger.info(
             "SMS iniciado | campaña: %s | registros: %d",
             payload.campaignId, df.height,
