@@ -188,6 +188,7 @@ def _sms_repo_mock() -> MagicMock:
 def _email_repo_mock() -> MagicMock:
     m = MagicMock()
     m.assert_campaigns_exist = AsyncMock(return_value=None)
+    m.create_campaign_tables = AsyncMock(return_value=None)
     m.bulk_insert = AsyncMock(side_effect=lambda cid, df: len(df))
     return m
 

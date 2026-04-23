@@ -76,9 +76,9 @@ async def test_empty_df_returns_zero_without_db_call():
 
 
 async def test_create_table_sp_called_with_correct_id():
-    """SP create_mail_table se llama con el campaign_id exacto."""
+    """SP create_mail_table se llama con el campaign_id exacto via create_campaign_tables."""
     engine, conn = _make_engine_mock()
-    await EmailConfirmRepository(engine=engine).bulk_insert(CAMPAIGN_ID, _sample_df())
+    await EmailConfirmRepository(engine=engine).create_campaign_tables([CAMPAIGN_ID])
 
     sp_calls = [c for c in conn.execute.call_args_list if "create_mail_table" in str(c.args[0])]
     assert sp_calls, "SP create_mail_table nunca fue llamado"

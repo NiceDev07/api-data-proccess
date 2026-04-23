@@ -99,13 +99,14 @@ class EmailProcessor(IDataProcessor):
             pl.col(Cols.credits).sum().alias("total_credits"),
         )
         group_lf = (
-            valid_lf
+            df.lazy()
             .with_columns(normalized_domain.alias(Cols.email_domain))
             .group_by(Cols.email_domain)
             .agg(
-                pl.len().alias("total"),
+                pl.col(Cols.is_ok).sum().alias("total"),
+                (~pl.col(Cols.is_ok)).sum().alias("total_excluded"),
                 pl.col(Cols.cost).first().alias("unit_value"),
-                pl.col(Cols.credits).sum().alias("credits"),
+                pl.col(Cols.credits).filter(pl.col(Cols.is_ok)).sum().alias("credits"),
             )
             .sort("credits", descending=True)
         )

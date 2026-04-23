@@ -59,6 +59,7 @@ class CBCampaignSummary(BaseModel):
 class EmailSummaryGroup(BaseModel):
     domain: str
     total: int
+    total_excluded: int
     unit_value: float   # costo por registro
     credits: float
 

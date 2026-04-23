@@ -34,14 +34,14 @@ class EmailConfirmRepository:
                 f"Las siguientes campañas no existen en mail_campaings.campaigns: {missing}"
             )
 
+    async def create_campaign_tables(self, campaign_ids: list[int]) -> None:
+        """Crea todas las tablas vía SP en un solo thread — N SP calls, 1 dispatch."""
+        await asyncio.to_thread(self._sync_create_tables, campaign_ids)
+
     async def bulk_insert(self, campaign_id: int, df: pl.DataFrame) -> int:
         if df.is_empty():
             return 0
 
-        # 1. Crear tabla dedicada vía SP (idempotente si ya existe)
-        await asyncio.to_thread(self._sync_create_table, campaign_id)
-
-        # 2. LOAD DATA para >= threshold; batch INSERT para el resto
         if df.height >= _LOAD_DATA_THRESHOLD:
             return await asyncio.to_thread(self._sync_load_data, campaign_id, df)
 
@@ -58,13 +58,14 @@ class EmailConfirmRepository:
         found = {row[0] for row in rows}
         return [cid for cid in campaign_ids if cid not in found]
 
-    def _sync_create_table(self, campaign_id: int) -> None:
-        """Llama al SP que crea la tabla dedicada mail_{id}."""
+    def _sync_create_tables(self, campaign_ids: list[int]) -> None:
+        """Llama al SP para cada campaña en una sola conexión."""
         with self._engine.begin() as conn:
-            conn.execute(
-                text("CALL `mail_campaings`.`create_mail_table`(:cid)"),
-                {"cid": campaign_id},
-            )
+            for cid in campaign_ids:
+                conn.execute(
+                    text("CALL `mail_campaings`.`create_mail_table`(:cid)"),
+                    {"cid": cid},
+                )
 
     def _sync_load_data(self, campaign_id: int, df: pl.DataFrame) -> int:
         """LOAD DATA LOCAL INFILE — vía más rápida para >= 10 000 filas."""

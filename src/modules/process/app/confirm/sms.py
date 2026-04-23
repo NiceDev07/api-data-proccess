@@ -21,6 +21,8 @@ _COL_MAP = {
 _STATUS_PENDING  = "P"
 _STATUS_EXCLUDED = "X"
 
+_DROP_COLS = [Cols.is_ok, Cols.error_code]
+
 
 class SmsConfirmStrategy(BaseConfirmStrategy):
     _service_name = "sms"
@@ -30,18 +32,17 @@ class SmsConfirmStrategy(BaseConfirmStrategy):
         self._repo = repo
 
     async def _do_confirm(self, path: Path, _campaign_ids: list[int]) -> dict[str, Any]:
-        df = await asyncio.to_thread(pl.read_parquet, path)
+        lf = pl.scan_parquet(path)
+        lf = self._map_columns(lf)
+        lf = self._add_computed_columns(lf)
+        df = lf.collect()
 
         if df.is_empty():
             return {"inserted": 0, "message": "No records to insert."}
 
-        df = self._map_columns(df)
-        df = self._add_computed_columns(df)
-
-        # Crea todas las tablas en una sola transacción (shared async session)
+        # Create all tables in one transaction before parallel inserts
         await self._repo.create_campaign_tables(_campaign_ids)
 
-        # Bulk inserts are independent — run concurrently across campaigns
         results = await asyncio.gather(*[
             self._repo.bulk_insert(
                 campaign_id,
@@ -52,30 +53,36 @@ class SmsConfirmStrategy(BaseConfirmStrategy):
 
         return {"inserted": sum(results)}
 
-    def _map_columns(self, df: pl.DataFrame) -> pl.DataFrame:
-        df = df.rename({k: v for k, v in _COL_MAP.items() if k in df.columns})
+    def _map_columns(self, lf: pl.LazyFrame) -> pl.LazyFrame:
+        schema = lf.collect_schema()
 
-        # identificacion: optional in parquet, required (NOT NULL) in table → default ""
-        if Cols.identifier in df.columns and df[Cols.identifier].drop_nulls().len() > 0:
-            df = df.rename({Cols.identifier: "identificacion"})
+        rename_map = {k: v for k, v in _COL_MAP.items() if k in schema}
+        if rename_map:
+            lf = lf.rename(rename_map)
+
+        if Cols.identifier in schema:
+            lf = (
+                lf
+                .with_columns(pl.col(Cols.identifier).fill_null("").alias("identificacion"))
+                .drop(Cols.identifier)
+            )
         else:
-            if Cols.identifier in df.columns:
-                df = df.drop(Cols.identifier)
-            df = df.with_columns(pl.lit("").alias("identificacion"))
+            lf = lf.with_columns(pl.lit("").alias("identificacion"))
 
-        return df
+        return lf
 
-    def _add_computed_columns(self, df: pl.DataFrame) -> pl.DataFrame:
+    def _add_computed_columns(self, lf: pl.LazyFrame) -> pl.LazyFrame:
+        schema = lf.collect_schema()
+        cols_to_drop = [c for c in _DROP_COLS if c in schema] + ["_idx"]
         return (
-            df
+            lf
             .with_row_index("_idx")
             .with_columns(
                 pl.when(pl.col(Cols.is_ok))
                   .then(pl.lit(_STATUS_PENDING))
                   .otherwise(pl.lit(_STATUS_EXCLUDED))
                   .alias("estado"),
-                # servicio is VARCHAR(3) in the table
                 ((pl.col("_idx") % 100) + 1).cast(pl.Utf8).alias("servicio"),
             )
-            .drop([Cols.is_ok, Cols.error_code, "_idx"])
+            .drop(cols_to_drop)
         )
