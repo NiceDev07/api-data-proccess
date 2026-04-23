@@ -28,32 +28,16 @@ class CalculatePDU(IPipeline):
             msg.str.len_bytes().alias(Cols.length_bytes),
         )
 
-        df = df.with_columns(
-            (pl.col(Cols.length) != pl.col(Cols.length_bytes)).alias(Cols.is_special)
-        )
-
-        df = df.with_columns(
-            pl.when(pl.col(Cols.is_special))
-            .then(pl.lit(pdu_spc))
-            .otherwise(pl.lit(pdu_std))
-            .alias(Cols.credit_base),
-
-            pl.when(pl.col(Cols.is_special))
-            .then(pl.lit(overhead_spc))
-            .otherwise(pl.lit(overhead_std))
-            .alias(Cols.overhead),
-        )
-
-        df = df.with_columns(
-            pl.when(pl.col(Cols.length) <= pl.col(Cols.credit_base))
-            .then(pl.col(Cols.credit_base))
-            .otherwise(pl.col(Cols.credit_base) - pl.col(Cols.overhead))
-            .alias(Cols.div)
-        )
+        # Todas las derivaciones en un solo pass — evita 3 copias intermedias del DataFrame
+        is_special = pl.col(Cols.length) != pl.col(Cols.length_bytes)
+        credit_base = pl.when(is_special).then(pl.lit(pdu_spc)).otherwise(pl.lit(pdu_std))
+        overhead = pl.when(is_special).then(pl.lit(overhead_spc)).otherwise(pl.lit(overhead_std))
+        div = pl.when(pl.col(Cols.length) <= credit_base).then(credit_base).otherwise(credit_base - overhead)
 
         return df.with_columns(
-            (pl.col(Cols.length) / pl.col(Cols.div))
-            .ceil()
-            .cast(pl.Int32)
-            .alias(Cols.pdu)
+            is_special.alias(Cols.is_special),
+            credit_base.alias(Cols.credit_base),
+            overhead.alias(Cols.overhead),
+            div.alias(Cols.div),
+            (pl.col(Cols.length) / div).ceil().cast(pl.Int32).alias(Cols.pdu),
         )

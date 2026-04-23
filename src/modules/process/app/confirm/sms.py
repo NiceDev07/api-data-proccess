@@ -38,9 +38,8 @@ class SmsConfirmStrategy(BaseConfirmStrategy):
         df = self._map_columns(df)
         df = self._add_computed_columns(df)
 
-        # Table creation must be sequential (shared async session)
-        for campaign_id in _campaign_ids:
-            await self._repo.create_campaign_table(campaign_id)
+        # Crea todas las tablas en una sola transacción (shared async session)
+        await self._repo.create_campaign_tables(_campaign_ids)
 
         # Bulk inserts are independent — run concurrently across campaigns
         results = await asyncio.gather(*[

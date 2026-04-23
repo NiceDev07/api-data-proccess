@@ -10,5 +10,4 @@ class FfprobeAudioDurationProvider:
         self._extra = extra_seconds
 
     async def get_duration(self, path: str) -> float:
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, probe_duration, path, self._extra)
+        return await asyncio.to_thread(probe_duration, path, self._extra)

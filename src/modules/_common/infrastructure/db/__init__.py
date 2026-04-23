@@ -1,15 +1,13 @@
 from fastapi import Request
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import sessionmaker
 
 
 def get_session_factory(db_name: str):
     """Async session por request — inyectada vía Depends()."""
     async def _get_session(request: Request):
-        engine = request.app.state.engines.get(db_name)
-        SessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
-        async with SessionLocal() as session:
+        factory = request.app.state.session_factories[db_name]
+        async with factory() as session:
             yield session
     return _get_session
 

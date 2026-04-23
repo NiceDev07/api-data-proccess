@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from sqlalchemy import create_engine
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 import redis.asyncio as redis
 
 from config.settings import settings  # type: ignore
@@ -115,10 +115,16 @@ async def lifespan(app: FastAPI):
         max_records_elevated=settings.MAX_CAMPAIGN_RECORDS,
     )
 
-    app.state.engines      = engines
-    app.state.sync_engines = sync_engines
-    app.state.redis        = redis_client
-    app.state.process_deps = process_deps
+    session_factories = {
+        name: async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+        for name, engine in engines.items()
+    }
+
+    app.state.engines           = engines
+    app.state.sync_engines      = sync_engines
+    app.state.session_factories = session_factories
+    app.state.redis             = redis_client
+    app.state.process_deps      = process_deps
 
     try:
         yield  # ── app corriendo ─────────────────────────────────────────────

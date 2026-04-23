@@ -36,8 +36,8 @@ class ExclutionEmail(IPipeline):
             .filter(pl.col(c).is_not_null())
         )
 
-        exclusion_set = emails_to_exclude.get_column(c).to_list()
-        is_excluded = pl.col(Cols.email).is_in(exclusion_set)
+        exclusion_series = emails_to_exclude.get_column(c).implode()
+        is_excluded = pl.col(Cols.email).is_in(exclusion_series)
 
         return df.with_columns(
             (~is_excluded).alias(Cols.is_ok),

@@ -25,7 +25,6 @@ class RemoteAudioDurationProvider:
             tmp_path = tmp.name
 
         try:
-            loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(None, probe_duration, tmp_path, self._extra)
+            return await asyncio.to_thread(probe_duration, tmp_path, self._extra)
         finally:
             os.unlink(tmp_path)

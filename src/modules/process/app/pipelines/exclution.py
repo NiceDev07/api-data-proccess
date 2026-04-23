@@ -49,8 +49,8 @@ class Exclution(IPipeline):
               .with_columns(pl.col(c).cast(pl.Int64, strict=False).alias(c))
         )
 
-        exclusion_set = numbers_to_exclude.get_column(c).to_list()
-        is_excluded = pl.col(colum_main).is_in(exclusion_set)
+        exclusion_series = numbers_to_exclude.get_column(c).implode()
+        is_excluded = pl.col(colum_main).is_in(exclusion_series)
         result = df.with_columns(
             (~is_excluded).alias(Cols.is_ok),
             pl.when(is_excluded)

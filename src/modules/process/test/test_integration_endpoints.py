@@ -180,6 +180,7 @@ def _email_exclusion_mock() -> MagicMock:
 def _sms_repo_mock() -> MagicMock:
     m = MagicMock()
     m.create_campaign_table = AsyncMock(return_value=None)
+    m.create_campaign_tables = AsyncMock(return_value=None)
     m.bulk_insert = AsyncMock(side_effect=lambda cid, df: len(df))
     return m
 

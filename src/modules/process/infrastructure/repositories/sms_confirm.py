@@ -46,8 +46,13 @@ class SmsConfirmRepository:
         self._engine = engine
 
     async def create_campaign_table(self, campaign_id: int) -> None:
+        await self.create_campaign_tables([campaign_id])
+
+    async def create_campaign_tables(self, campaign_ids: list[int]) -> None:
+        """Crea múltiples tablas en una sola transacción — reduce round-trips de 4N a N+3."""
         await self._session.execute(text("SET sql_notes = 0"))
-        await self._session.execute(text(_CREATE_TABLE_SQL.format(campaign_id=campaign_id)))
+        for campaign_id in campaign_ids:
+            await self._session.execute(text(_CREATE_TABLE_SQL.format(campaign_id=campaign_id)))
         await self._session.execute(text("SET sql_notes = 1"))
         await self._session.commit()
 

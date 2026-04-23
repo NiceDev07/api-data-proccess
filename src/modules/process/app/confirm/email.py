@@ -37,11 +37,12 @@ class EmailConfirmStrategy(BaseConfirmStrategy):
 
         # await self._repo.assert_campaigns_exist(campaign_ids)
 
-        total = 0
-        for campaign_id in campaign_ids:
-            total += await self._repo.bulk_insert(campaign_id, df)
+        results = await asyncio.gather(*[
+            self._repo.bulk_insert(campaign_id, df)
+            for campaign_id in campaign_ids
+        ])
 
-        return {"inserted": total}
+        return {"inserted": sum(results)}
 
     def _map_columns(self, df: pl.DataFrame) -> pl.DataFrame:
         df = df.rename({k: v for k, v in _COL_MAP.items() if k in df.columns})
