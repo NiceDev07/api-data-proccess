@@ -9,6 +9,10 @@ StartLimitBurst=3
 Type=notify
 NotifyAccess=main
 
+# ── Identity ──────────────────────────────────────────────────────────────────
+User=apiuser
+Group=apiuser
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
 WorkingDirectory=/opt/api-data-process
 
