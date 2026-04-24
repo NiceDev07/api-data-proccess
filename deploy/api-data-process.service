@@ -4,26 +4,11 @@ After=network.target redis.service mysql.service
 Wants=redis.service
 
 [Service]
-# ── Process type ──────────────────────────────────────────────────────────────
-# "notify" tells systemd to wait for Gunicorn's sd_notify READY=1 before
-# marking the service as started (requires gunicorn >= 20.0, already satisfied).
 Type=notify
 NotifyAccess=main
 
-# ── Identity ──────────────────────────────────────────────────────────────────
-User=apiuser
-Group=apiuser
-
 # ── Paths ─────────────────────────────────────────────────────────────────────
 WorkingDirectory=/opt/api-data-process
-RuntimeDirectory=api-data-process
-RuntimeDirectoryMode=0750
-
-# Adjust ReadWritePaths to include OUTPUT_DIR and REPOSITORY_FILES_DIR values
-# from your .env so the hardened filesystem allows writes there.
-# Example:
-#   ReadWritePaths=/opt/api-data-process/resultados /mnt/data/DataStorage
-ReadWritePaths=/opt/api-data-process/resultados
 
 # ── Environment ───────────────────────────────────────────────────────────────
 EnvironmentFile=/opt/api-data-process/.env
@@ -35,8 +20,6 @@ ExecStart=/opt/api-data-process/.venv/bin/gunicorn \
     --config /opt/api-data-process/gunicorn.conf.py \
     main:app
 
-# Graceful reload: sends SIGHUP to the master, which respawns workers one by one
-# with zero downtime.  Usage: systemctl reload api-data-process
 ExecReload=/bin/kill -s HUP $MAINPID
 
 # ── Restart policy ────────────────────────────────────────────────────────────
@@ -46,15 +29,8 @@ StartLimitIntervalSec=60s
 StartLimitBurst=3
 
 # ── Resource limits ───────────────────────────────────────────────────────────
-# Large CSV processing can spawn many file descriptors and threads.
 LimitNOFILE=65535
 LimitNPROC=4096
-
-# ── Security hardening ────────────────────────────────────────────────────────
-PrivateTmp=true
-ProtectSystem=full
-NoNewPrivileges=true
-ProtectHome=read-only
 
 [Install]
 WantedBy=multi-user.target
