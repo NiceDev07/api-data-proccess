@@ -2,6 +2,8 @@
 Description=API Data Process Service (Gunicorn + Uvicorn)
 After=network.target redis.service mysql.service
 Wants=redis.service
+StartLimitIntervalSec=60s
+StartLimitBurst=3
 
 [Service]
 Type=notify
@@ -25,8 +27,6 @@ ExecReload=/bin/kill -s HUP $MAINPID
 # ── Restart policy ────────────────────────────────────────────────────────────
 Restart=on-failure
 RestartSec=5s
-StartLimitIntervalSec=60s
-StartLimitBurst=3
 
 # ── Resource limits ───────────────────────────────────────────────────────────
 LimitNOFILE=65535
