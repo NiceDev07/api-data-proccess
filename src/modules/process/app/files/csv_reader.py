@@ -22,6 +22,7 @@ class CsvReader(IFileReader):
                 file_path,
                 separator=config.delimiter,
                 encoding="utf8-lossy",
+                quote_char='"',
                 has_header=config.useHeaders,
                 infer_schema_length=1000,
                 ignore_errors=False,
