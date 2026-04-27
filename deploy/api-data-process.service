@@ -10,8 +10,8 @@ Type=notify
 NotifyAccess=main
 
 # ── Identity ──────────────────────────────────────────────────────────────────
-User=apiuser
-Group=apiuser
+User=root
+Group=root
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 WorkingDirectory=/opt/api-data-process
