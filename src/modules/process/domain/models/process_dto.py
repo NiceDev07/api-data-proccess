@@ -1,5 +1,5 @@
 from typing import List, Optional, Literal
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 # SI APLICA
 class RulesCountry(BaseModel):
@@ -55,3 +55,10 @@ class DataProcessingDTO(BaseModel):
 
 class SmsDataProcessingDTO(DataProcessingDTO):
     shortname: str
+
+    @field_validator("shortname")
+    @classmethod
+    def shortname_not_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("El shortname no puede estar vacío.")
+        return v

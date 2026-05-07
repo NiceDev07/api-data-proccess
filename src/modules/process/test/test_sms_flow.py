@@ -20,6 +20,7 @@ from modules.process.domain.models.process_dto import (
     ConfigListExclusion,
     DataProcessingDTO,
     InfoUserValidSend,
+    SmsDataProcessingDTO,
 )
 
 from .conftest import (
@@ -284,3 +285,23 @@ async def test_sms_flow_result_parquet_saved():
     assert Cols.credits in saved.columns
     assert Cols.is_ok in saved.columns
     assert len(saved) == 2
+
+
+# ---------------------------------------------------------------------------
+# Fix 1 — shortname vacío rechazado por validación Pydantic
+# ---------------------------------------------------------------------------
+
+def test_sms_shortname_empty_rejected():
+    """SmsDataProcessingDTO rechaza shortname vacío o solo espacios."""
+    from pydantic import ValidationError
+
+    base = make_payload(shortname="SAEM3").model_dump()
+
+    for valor_invalido in ["", "   "]:
+        base["shortname"] = valor_invalido
+        with pytest.raises(ValidationError) as exc_info:
+            SmsDataProcessingDTO.model_validate(base)
+        errores = exc_info.value.errors()
+        assert any(e["loc"] == ("shortname",) for e in errores), (
+            f"Se esperaba error en campo 'shortname' para valor '{valor_invalido}'"
+        )
