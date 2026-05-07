@@ -79,9 +79,7 @@ class SmsProcessor(IDataProcessor):
                 pl.len().alias("total"),
                 pl.col(Cols.pdu).sum().alias("pdu"),
                 pl.col(Cols.credits).sum().alias("credits"),
-            )
-            .with_columns(
-                (pl.col("credits") / pl.col("total")).alias("unit_value")
+                pl.col(Cols.cost).first().alias("unit_value"),
             )
             .sort("credits", descending=True)
         )
