@@ -1,6 +1,7 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from modules.process.domain.models.process_dto import DataProcessingDTO, SmsDataProcessingDTO
 from modules.process.domain.models.confirm_dto import ConfirmRequest
 from modules.process.domain.enums.services import ServiceType
@@ -65,9 +66,14 @@ def get_use_case(
 
 async def _parse_payload(service: ServiceType, request: Request) -> DataProcessingDTO:
     body = await request.json()
-    if service == ServiceType.sms:
-        return SmsDataProcessingDTO.model_validate(body)
-    return DataProcessingDTO.model_validate(body)
+    try:
+        if service == ServiceType.sms:
+            return SmsDataProcessingDTO.model_validate(body)
+        return DataProcessingDTO.model_validate(body)
+    except ValidationError as exc:
+        first = exc.errors()[0]
+        field = ".".join(str(loc) for loc in first["loc"])
+        raise HTTPException(status_code=400, detail=f"{field}: {first['msg']}")
 
 
 @router.post("/processing/{service}")
