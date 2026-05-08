@@ -74,11 +74,12 @@ class SmsProcessor(IDataProcessor):
         valid = df.filter(pl.col(Cols.is_ok))
 
         group_df = (
-            valid.group_by(Cols.cost_operator)
+            df.group_by(Cols.cost_operator)
             .agg(
-                pl.len().alias("total"),
-                pl.col(Cols.pdu).sum().alias("pdu"),
-                pl.col(Cols.credits).sum().alias("credits"),
+                pl.col(Cols.is_ok).sum().alias("total"),
+                (~pl.col(Cols.is_ok)).sum().alias("total_excluded"),
+                pl.col(Cols.pdu).filter(pl.col(Cols.is_ok)).sum().alias("pdu"),
+                pl.col(Cols.credits).filter(pl.col(Cols.is_ok)).sum().alias("credits"),
                 pl.col(Cols.cost).first().alias("unit_value"),
             )
             .sort("credits", descending=True)
