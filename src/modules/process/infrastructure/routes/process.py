@@ -73,7 +73,9 @@ async def _parse_payload(service: ServiceType, request: Request) -> DataProcessi
     except ValidationError as exc:
         first = exc.errors()[0]
         field = ".".join(str(loc) for loc in first["loc"])
-        raise HTTPException(status_code=400, detail=f"{field}: {first['msg']}")
+        msg = first["msg"].removeprefix("Value error, ")
+        detail = f"{field}: {msg}" if field else msg
+        raise HTTPException(status_code=400, detail=detail)
 
 
 @router.post("/processing/{service}")

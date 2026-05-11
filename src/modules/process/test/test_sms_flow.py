@@ -288,20 +288,50 @@ async def test_sms_flow_result_parquet_saved():
 
 
 # ---------------------------------------------------------------------------
-# Fix 1 — shortname vacío rechazado por validación Pydantic
+# Fix 1 — shortname condicional según useShortName
 # ---------------------------------------------------------------------------
 
-def test_sms_shortname_empty_rejected():
-    """SmsDataProcessingDTO rechaza shortname vacío o solo espacios."""
+def test_sms_shortname_required_only_when_rule_active():
+    """Shortname vacío es rechazado solo cuando useShortName=True."""
     from pydantic import ValidationError
+    from modules.process.domain.models.process_dto import RulesCountry
 
-    base = make_payload(shortname="SAEM3").model_dump()
+    rules_on  = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "useShortName": True})
+    rules_off = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "useShortName": False})
+
+    content_with = "Hola SAEM3 este es el mensaje."
 
     for valor_invalido in ["", "   "]:
-        base["shortname"] = valor_invalido
-        with pytest.raises(ValidationError) as exc_info:
+        base = make_payload(shortname=valor_invalido, content=content_with,
+                            subService="informative", rulesCountry=rules_on).model_dump()
+        with pytest.raises(ValidationError):
             SmsDataProcessingDTO.model_validate(base)
-        errores = exc_info.value.errors()
-        assert any(e["loc"] == ("shortname",) for e in errores), (
-            f"Se esperaba error en campo 'shortname' para valor '{valor_invalido}'"
-        )
+
+    base = make_payload(shortname="", content="Mensaje sin shortname.",
+                        subService="informative", rulesCountry=rules_off).model_dump()
+    SmsDataProcessingDTO.model_validate(base)
+
+
+def test_sms_content_missing_shortname_rejected():
+    """Content sin shortname es rechazado cuando useShortName=True."""
+    from pydantic import ValidationError
+    from modules.process.domain.models.process_dto import RulesCountry
+
+    rules_on = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "useShortName": True})
+    base = make_payload(shortname="SAEM3", content="Mensaje sin el remitente.",
+                        subService="informative", rulesCountry=rules_on).model_dump()
+    with pytest.raises(ValidationError) as exc_info:
+        SmsDataProcessingDTO.model_validate(base)
+    assert any("shortname" in str(e["msg"]).lower() or "contenido" in str(e["msg"]).lower()
+               for e in exc_info.value.errors())
+
+
+def test_sms_subservice_invalid_rejected():
+    """subService inválido es rechazado con ValidationError."""
+    from pydantic import ValidationError
+
+    for valor in ["unitario", "", "broadcast"]:
+        base = make_payload(shortname="SAEM3").model_dump()
+        base["subService"] = valor
+        with pytest.raises(ValidationError):
+            SmsDataProcessingDTO.model_validate(base)

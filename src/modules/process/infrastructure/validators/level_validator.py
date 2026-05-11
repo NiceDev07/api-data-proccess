@@ -40,8 +40,7 @@ class LevelValidator(IUserLevelValidator):
         bad = df.filter(mism).select(pl.col(number_col)).head(3).to_series().to_list()
         if bad:
             raise ValueError(
-                f"Nivel 1: todos los registros deben tener {number_col} = '{target}'. "
-                f"Se encontraron valores distintos (ejemplos): {bad}"
+                "El archivo contiene registros que no corresponden al número autorizado para pruebas."
             )
 
         return df.lazy()

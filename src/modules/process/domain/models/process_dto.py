@@ -1,5 +1,6 @@
 from typing import List, Optional, Literal
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
+from modules.process.domain.enums.sub_services import SmsSubService
 
 # SI APLICA
 class RulesCountry(BaseModel):
@@ -54,11 +55,20 @@ class DataProcessingDTO(BaseModel):
 
 
 class SmsDataProcessingDTO(DataProcessingDTO):
-    shortname: str
 
-    @field_validator("shortname")
+    @field_validator("subService")
     @classmethod
-    def shortname_not_empty(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError("El shortname no puede estar vacío.")
+    def subservice_valid(cls, v: str) -> str:
+        if v not in {s.value for s in SmsSubService}:
+            raise ValueError("Sub-servicio no válido para SMS.")
         return v
+
+    @model_validator(mode="after")
+    def validate_shortname(self) -> "SmsDataProcessingDTO":
+        if not self.rulesCountry.useShortName:
+            return self
+        if not self.shortname or not self.shortname.strip():
+            raise ValueError("El shortname es requerido.")
+        if self.shortname not in self.content:
+            raise ValueError("El contenido del mensaje debe incluir el shortname.")
+        return self
