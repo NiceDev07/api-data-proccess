@@ -15,24 +15,31 @@ _INSERT_CHUNK = 5_000
 
 _CREATE_TABLE_SQL = """
     CREATE TABLE IF NOT EXISTS `campana_{campaign_id}` (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        celular VARCHAR(18) NOT NULL,
-        id_campana INT NOT NULL DEFAULT '{campaign_id}',
-        estado ENUM('C','F','P','E','B','X','A','D') NOT NULL DEFAULT 'P',
-        codigo_corto VARCHAR(10),
-        texto TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-        identificacion VARCHAR(250) NOT NULL,
-        servicio VARCHAR(3) NOT NULL,
-        codigo_respuesta VARCHAR(40),
-        fecha_envio DATETIME,
-        operador VARCHAR(40),
-        respuesta_operador VARCHAR(20),
-        pdu INT NOT NULL DEFAULT 0,
-        credit FLOAT NOT NULL DEFAULT 0.0,
+        `id` int(11) NOT NULL AUTO_INCREMENT,
+        `celular` varchar(18) NOT NULL,
+        `id_campana` int(11) NOT NULL DEFAULT '245345',
+        `estado` enum('C','F','P','E','B','X','A','D') NOT NULL DEFAULT 'P',
+        `codigo_corto` varchar(10) DEFAULT NULL,
+        `texto` text NOT NULL,
+        `identificacion` varchar(250) NOT NULL,
+        `servicio` varchar(3) NOT NULL,
+        `codigo_respuesta` varchar(40) DEFAULT NULL,
+        `fecha_envio` datetime DEFAULT NULL,
+        `operador` varchar(40) DEFAULT NULL,
+        `respuesta_operador` varchar(20) DEFAULT NULL,
+        `pdu` int(11) NOT NULL DEFAULT '0',
+        `credit` float NOT NULL DEFAULT '0',
+
+        PRIMARY KEY (`id`),
+
         INDEX idx_estado_celular (estado, celular),
         INDEX idx_id_campana (id_campana)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+    ) ENGINE=InnoDB
+      DEFAULT CHARSET=utf8mb4;
 """
+
+
 
 
 class SmsConfirmRepository:
