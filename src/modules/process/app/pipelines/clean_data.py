@@ -13,10 +13,7 @@ class CleanData(IPipeline):
     async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
         c = ctx.configFile.nameColumnDemographic
         if c not in df.columns:
-            raise ValueError(
-                f"La columna '{c}' no existe en el archivo. "
-                f"Columnas disponibles: {df.columns}"
-            )
+            raise ValueError("COLUMN_NOT_FOUND: The demographic column was not found in the uploaded file.")
         MIN_DIGITS = max(ctx.rulesCountry.numberDigitsFixed, ctx.rulesCountry.numberDigitsMobile)
         cleaned = self.normalizer.normalize(c)
 
