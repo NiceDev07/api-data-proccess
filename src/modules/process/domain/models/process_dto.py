@@ -60,7 +60,7 @@ class SmsDataProcessingDTO(DataProcessingDTO):
     @classmethod
     def subservice_valid(cls, v: str) -> str:
         if v not in {s.value for s in SmsSubService}:
-            raise ValueError("Sub-servicio no válido para SMS.")
+            raise ValueError("INVALID_SUB_SERVICE: sub-service not allowed for SMS.")
         return v
 
     @model_validator(mode="after")
@@ -68,7 +68,7 @@ class SmsDataProcessingDTO(DataProcessingDTO):
         if not self.rulesCountry.useShortName:
             return self
         if not self.shortname or not self.shortname.strip():
-            raise ValueError("El shortname es requerido.")
+            raise ValueError("SHORTNAME_REQUIRED: Shortname is required.")
         if self.shortname not in self.content:
-            raise ValueError("El contenido del mensaje debe incluir el shortname.")
+            raise ValueError("SHORTNAME_NOT_IN_CONTENT: Message content must include the shortname.")
         return self
