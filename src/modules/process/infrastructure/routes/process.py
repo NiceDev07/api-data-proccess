@@ -19,7 +19,7 @@ from modules._common.infrastructure.db import (
     get_db_portabilidad,
     get_db_saem3,
     get_db_telefonos_campanas,
-    get_sync_engine_campanas,
+    get_async_engine_campanas,
     get_sync_engine_email,
 )
 from modules.process.app.confirm.sms import SmsConfirmStrategy
@@ -29,6 +29,7 @@ from modules.process.app.confirm.factory import ConfirmFactory
 from modules.process.infrastructure.repositories.sms_confirm import SmsConfirmRepository
 from modules.process.infrastructure.repositories.email_confirm import EmailConfirmRepository
 from sqlalchemy.engine import Engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 logger = logging.getLogger(__name__)
 
@@ -72,9 +73,7 @@ async def _parse_payload(service: ServiceType, request: Request) -> DataProcessi
         return DataProcessingDTO.model_validate(body)
     except ValidationError as exc:
         first = exc.errors()[0]
-        field = ".".join(str(loc) for loc in first["loc"])
-        msg = first["msg"].removeprefix("Value error, ")
-        detail = f"{field}: {msg}" if field else msg
+        detail = first["msg"].removeprefix("Value error, ")
         raise HTTPException(status_code=400, detail=detail)
 
 
@@ -98,12 +97,12 @@ async def process_data(
 def get_confirm_factory(
     shared: ProcessSharedDeps = Depends(get_shared_deps),
     db_telefonos_campanas=Depends(get_db_telefonos_campanas),
-    sync_engine_campanas: Engine = Depends(get_sync_engine_campanas),
+    async_engine_campanas: AsyncEngine = Depends(get_async_engine_campanas),
     sync_engine_email: Engine = Depends(get_sync_engine_email),
 ) -> ConfirmFactory:
     return ConfirmFactory({
         ServiceType.sms: SmsConfirmStrategy(
-            SmsConfirmRepository(db_telefonos_campanas, sync_engine_campanas), shared.storage
+            SmsConfirmRepository(db_telefonos_campanas, async_engine_campanas), shared.storage
         ),
         ServiceType.email: EmailConfirmStrategy(
             EmailConfirmRepository(sync_engine_email), shared.storage

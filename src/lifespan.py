@@ -61,15 +61,9 @@ async def lifespan(app: FastAPI):
         ),
     }
 
-    # Engines síncronos para los confirm (LOAD DATA / batch INSERT en threads).
-    # Son los únicos que necesitan pymysql + local_infile.
-    logger.info("Inicializando pools sync de MySQL...")
+    # Engine síncrono solo para email confirm (LOAD DATA / batch INSERT en threads).
+    logger.info("Inicializando pool sync de MySQL (email)...")
     sync_engines = {
-        "telefonos_campanas": create_engine(
-            _sync_dsn(settings.DB_TELEFONOS_CAMPANAS),
-            connect_args={"local_infile": True, "charset": "utf8mb4"},
-            **_SYNC_ENGINE_ARGS,
-        ),
         "email": create_engine(
             _sync_dsn(settings.DB_EMAIL),
             connect_args={"local_infile": True, "charset": "utf8mb4"},

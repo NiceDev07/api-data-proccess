@@ -1,10 +1,12 @@
 from typing import List, Tuple
 from sqlalchemy import select
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession
 from ..models.numeration import Numeracion
 from modules.process.domain.interfaces.numeracion_repository import INumeracionRepository
-from sqlalchemy.ext.asyncio import AsyncSession
+from logging_config import get_logger
+
+logger = get_logger(__name__)
+
 
 class NumeracionRepository(INumeracionRepository):
     def __init__(self, db_numeracioon: AsyncSession):
@@ -21,13 +23,17 @@ class NumeracionRepository(INumeracionRepository):
                 .where(Numeracion.id_pais == country_id)
                 .order_by(Numeracion.inicio.asc())
             )
-            result = await self.db_connection.execute(stmt)  # <- await aquí
+            result = await self.db_connection.execute(stmt)
             rows = result.all()
 
             if not rows:
-                raise ValueError(f"No numeration data found for country_id {country_id}")
+                logger.error("Sin datos de numeración para country_id=%s", country_id)
+                raise RuntimeError("numeration_not_found")
 
-            return rows                                       # List[Tuple[int,int,str]]
+            return rows
+        except RuntimeError:
+            raise
         except Exception as e:
-            await self.db_connection.rollback()               # <- con await
-            raise ValueError("Error al obtener numeración") from e
+            await self.db_connection.rollback()
+            logger.exception("Error al consultar numeración para country_id=%s", country_id)
+            raise RuntimeError("numeration_query_failed") from e
