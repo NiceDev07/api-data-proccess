@@ -70,7 +70,28 @@ async def _parse_payload(service: ServiceType, request: Request) -> DataProcessi
     return DataProcessingDTO.model_validate(body)
 
 
-@router.post("/processing/{service}")
+@router.post(
+    "/processing/{service}",
+    summary="Procesar archivo de campaña",
+    description=(
+        "Procesa un archivo CSV o XLSX con registros de campaña para el servicio indicado.\n\n"
+        "**Servicios disponibles:**\n"
+        "- `sms` — valida números, asigna operador, calcula PDU y créditos. "
+        "`subService`: `informative` | `landing`.\n"
+        "- `email` — valida formato de correo, extrae dominio, calcula créditos. "
+        "`subService`: `standard`.\n"
+        "- `call_blasting` — valida números, calcula duración y créditos. "
+        "`subService`: `standard` | `custom`.\n\n"
+        "Retorna un resumen con totales por operador/dominio, créditos y registros excluidos. "
+        "El archivo procesado se guarda como Parquet para ser usado en el confirm."
+    ),
+    responses={
+        200: {"description": "Archivo procesado exitosamente. Retorna summaryGeneral, summaryGroup y violations."},
+        400: {"description": "Payload inválido, subService no permitido, shortname requerido o archivo no encontrado."},
+        500: {"description": "Error interno del servidor."},
+    },
+    tags=["Process Service"],
+)
 async def process_data(
     service: ServiceType,
     payload: DataProcessingDTO = Depends(_parse_payload),
