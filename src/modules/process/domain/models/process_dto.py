@@ -1,60 +1,70 @@
 from typing import List, Optional, Literal
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from modules.process.domain.enums.sub_services import SmsSubService
 
-# SI APLICA
+
 class RulesCountry(BaseModel):
-    idCountry: int
-    codeCountry: int
-    # prefix: List[PrefixItem] # YA NO APLICA
-    useCharacterSpecial: bool
-    limitCharacter: int
-    limitCharacterSpecial: int
-    numberDigitsMobile: int
-    numberDigitsFixed: int
-    # listCostService: List[ListCostService] # YA NO APLICA
-    useShortName: bool
+    idCountry: int = Field(..., description="ID del país en la base de numeración.", examples=[81])
+    codeCountry: int = Field(..., description="Código telefónico del país (sin +).", examples=[57])
+    useCharacterSpecial: bool = Field(..., description="Si el país permite caracteres especiales (unicode) en SMS.")
+    limitCharacter: int = Field(..., description="Límite de caracteres para SMS estándar (ASCII).", examples=[160])
+    limitCharacterSpecial: int = Field(..., description="Límite de caracteres para SMS unicode.", examples=[70])
+    numberDigitsMobile: int = Field(..., description="Cantidad de dígitos de un número móvil válido.", examples=[10])
+    numberDigitsFixed: int = Field(..., description="Cantidad de dígitos de un número fijo válido.", examples=[7])
+    useShortName: bool = Field(..., description="Si es `true`, el campo `shortname` es obligatorio y debe estar incluido en `content`.")
+
 
 class BaseFileConfig(BaseModel):
-    folder: str
-    file: str
-    delimiter: str
-    useHeaders: bool
-    nameColumnDemographic: str
+    folder: str = Field(..., description="Ruta absoluta al directorio que contiene el archivo.")
+    file: str = Field(..., description="Nombre del archivo con extensión (CSV o XLSX).")
+    delimiter: str = Field(..., description="Delimitador de columnas para CSV. Dejar vacío para XLSX.")
+    useHeaders: bool = Field(..., description="Si `true`, la primera fila se usa como encabezado.")
+    nameColumnDemographic: str = Field(..., description="Nombre de la columna que contiene el número/email.")
+
 
 class ConfigFile(BaseFileConfig):
-    userIdentifier: bool
-    nameColumnIdentifier: str
-    fileRecords: int
+    userIdentifier: bool = Field(..., description="Si `true`, el archivo incluye columna de identificación.")
+    nameColumnIdentifier: str = Field(..., description="Nombre de la columna de identificación. Requerido si `userIdentifier=true`.")
+    fileRecords: int = Field(..., description="Total de registros en el archivo (sin contar encabezado).", examples=[200000])
+
 
 class ConfigListExclusion(BaseFileConfig):
-    paramIdentifier: Optional[Literal['demographic', 'identifier']] = None
+    paramIdentifier: Optional[Literal['demographic', 'identifier']] = Field(
+        None,
+        description="Columna a usar para comparar exclusiones: `demographic` (número/email) o `identifier`.",
+    )
+
 
 class InfoUserValidSend(BaseModel):
-    levelUser: int
-    demographic: str
+    levelUser: int = Field(..., description="Nivel del usuario: `1` = pruebas (máx. 10 registros), `2+` = producción (máx. 700 000).", examples=[2])
+    demographic: str = Field(..., description="Número o email del usuario para validación de nivel 1. Vacío en nivel 2+.")
 
 
 class DataProcessingDTO(BaseModel):
-    content: str # Tener en cuenta para el hash
-    shortname: Optional[str] = None
-    tariffId: int # Tener en cuenta para el hash
-    campaignId: List[int]
-    codeGroup: Optional[str] = None
-    configFile: ConfigFile # Tener en cuenta para el hash
-    useExclusionList: bool # Tener en cuenta para el hash
-    configListExclusion: Optional[ConfigListExclusion] = None # Tener en cuenta para el hash
-    subService: str # Tener en cuenta para el hash
-    rulesCountry: RulesCountry # Tener en cuenta para el hash
-    infoUserValidSend: InfoUserValidSend # Tener en cuenta para el hash
-    subject: Optional[str] = None          # asunto del correo; obligatorio para email
-    audioDuration: Optional[float] = None  # segundos; requerido en call_blasting_standard
-    audioPath: Optional[str] = None        # ruta local o URL; alternativa a audioDuration
-    # listBlockTerms: List[str] # YA DEBERIA APLICAR
-    # listExclusionGeneral: List[str] # Ya no DBERIA APLICAR
+    content: str = Field(..., description="Plantilla del mensaje. Puede incluir etiquetas `{columna}` para personalización.", examples=["Hola {nombre}, tu código es {codigo}."])
+    shortname: Optional[str] = Field(None, description="Remitente SMS. Obligatorio solo cuando `rulesCountry.useShortName=true` y debe estar incluido en `content`.")
+    tariffId: int = Field(..., description="ID de la tarifa a aplicar para el cálculo de créditos.", examples=[1])
+    campaignId: List[int] = Field(..., description="Lista de IDs de campaña. Se usa como nombre del archivo Parquet resultante.", examples=[[999001]])
+    codeGroup: Optional[str] = Field(None, description="Clave de grupo alternativa para nombrar el archivo Parquet. Tiene prioridad sobre `campaignId`.")
+    configFile: ConfigFile = Field(..., description="Configuración del archivo de datos a procesar.")
+    useExclusionList: bool = Field(..., description="Si `true`, se aplica la lista de exclusión definida en `configListExclusion`.")
+    configListExclusion: Optional[ConfigListExclusion] = Field(None, description="Configuración del archivo de exclusión. Requerido si `useExclusionList=true`.")
+    subService: str = Field(..., description="Sub-servicio a aplicar. Valores válidos según el servicio: SMS → `informative` | `landing`; Email → `standard`; Call Blasting → `standard` | `custom`.")
+    rulesCountry: RulesCountry = Field(..., description="Reglas del país: prefijos, límites de caracteres y validación de números.")
+    infoUserValidSend: InfoUserValidSend = Field(..., description="Información del nivel de usuario para validación de capacidad.")
+    subject: Optional[str] = Field(None, description="Asunto del correo. Obligatorio para el servicio `email`.")
+    audioDuration: Optional[float] = Field(None, description="Duración del audio en segundos. Requerido para `call_blasting` sub-servicio `standard` si no se provee `audioPath`.")
+    audioPath: Optional[str] = Field(None, description="Ruta local al archivo de audio. Alternativa a `audioDuration` para `call_blasting standard`.")
 
 
 class SmsDataProcessingDTO(DataProcessingDTO):
+    """
+    Payload para `POST /v2/processing/sms`.
+
+    Extiende `DataProcessingDTO` con validaciones específicas de SMS:
+    - `subService` debe ser `"informative"` o `"landing"`.
+    - `shortname` es obligatorio cuando `rulesCountry.useShortName=true` y debe estar incluido en `content`.
+    """
 
     @field_validator("subService")
     @classmethod
