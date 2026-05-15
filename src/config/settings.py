@@ -1,5 +1,8 @@
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from enum import Enum
+
+_ENV_FILE = Path(__file__).parent.parent.parent / ".env"
 
 class EnvironmentEnum(Enum):
         dev = "dev"
@@ -25,8 +28,8 @@ class Settings(BaseSettings):
     MAX_CAMPAIGN_RECORDS: int = 700_000
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        extra="ignore"  # Permite la existencia de variables extra
+        env_file=str(_ENV_FILE),
+        extra="ignore"
     )
 
 settings = Settings()
