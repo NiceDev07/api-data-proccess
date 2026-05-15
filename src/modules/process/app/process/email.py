@@ -80,7 +80,7 @@ class EmailProcessor(IDataProcessor):
         summary = self._build_summary(df)
         sg = summary.summaryGeneral
         logger.info(
-            "Email completado | válidos: %d | excluidos: %d | créditos: %.4f",
+            "Email completado | válidos: %d | excluidos: %d | créditos: %d",
             sg.total_records, sg.total_excluded, sg.total_credits,
         )
         return {"success": True, **summary.model_dump()}

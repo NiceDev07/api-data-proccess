@@ -19,7 +19,7 @@ from modules._common.infrastructure.db import (
     get_db_saem3,
     get_db_telefonos_campanas,
     get_sync_engine_campanas,
-    get_sync_engine_email,
+    get_async_engine_email,
 )
 from modules.process.app.confirm.sms import SmsConfirmStrategy
 from modules.process.app.confirm.email import EmailConfirmStrategy
@@ -28,6 +28,7 @@ from modules.process.app.confirm.factory import ConfirmFactory
 from modules.process.infrastructure.repositories.sms_confirm import SmsConfirmRepository
 from modules.process.infrastructure.repositories.email_confirm import EmailConfirmRepository
 from sqlalchemy.engine import Engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +71,28 @@ async def _parse_payload(service: ServiceType, request: Request) -> DataProcessi
     return DataProcessingDTO.model_validate(body)
 
 
-@router.post("/processing/{service}")
+@router.post(
+    "/processing/{service}",
+    summary="Procesar archivo de campaña",
+    description=(
+        "Lee el archivo de campaña (CSV/XLSX), aplica normalización, exclusiones y cálculo "
+        "de créditos según el servicio indicado, y guarda el resultado en Parquet.\n\n"
+        "**Servicios disponibles:**\n"
+        "- `sms` — normaliza números, asigna operador, calcula PDU y créditos.\n"
+        "- `email` — valida direcciones, agrupa por dominio, aplica template HTML. "
+        "Requiere `subject` y `content` (HTML). El resultado se agrupa por dominio "
+        "(gmail, hotmail, yahoo, outlook, icloud, others).\n"
+        "- `call_blasting` — calcula duración de audio y créditos por segundo.\n\n"
+        "El archivo Parquet resultante queda disponible para el endpoint `/confirm/{service}`."
+    ),
+    responses={
+        200: {"description": "Procesamiento exitoso. Retorna summaryGeneral y summaryGroup."},
+        400: {"description": "Parámetros inválidos (subject faltante, subService incorrecto, etc.)."},
+        404: {"description": "Archivo de campaña no encontrado."},
+        500: {"description": "Error interno del servidor."},
+    },
+    tags=["Processing Service"],
+)
 async def process_data(
     service: ServiceType,
     payload: DataProcessingDTO = Depends(_parse_payload),
@@ -91,14 +113,14 @@ def get_confirm_factory(
     shared: ProcessSharedDeps = Depends(get_shared_deps),
     db_telefonos_campanas=Depends(get_db_telefonos_campanas),
     sync_engine_campanas: Engine = Depends(get_sync_engine_campanas),
-    sync_engine_email: Engine = Depends(get_sync_engine_email),
+    async_engine_email: AsyncEngine = Depends(get_async_engine_email),
 ) -> ConfirmFactory:
     return ConfirmFactory({
         ServiceType.sms: SmsConfirmStrategy(
             SmsConfirmRepository(db_telefonos_campanas, sync_engine_campanas), shared.storage
         ),
         ServiceType.email: EmailConfirmStrategy(
-            EmailConfirmRepository(sync_engine_email), shared.storage
+            EmailConfirmRepository(async_engine_email), shared.storage
         ),
         ServiceType.call_blasting: CallBlastingConfirmStrategy(shared.storage),
     })
