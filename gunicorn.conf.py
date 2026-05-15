@@ -32,6 +32,12 @@ worker_connections = 1000
 # ── Process naming ────────────────────────────────────────────────────────────
 proc_name = "api-data-process"
 
+# ── App entrypoint ────────────────────────────────────────────────────────────
+# main.py lives in src/; chdir sets the working directory so Python finds it.
+_src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "src")
+chdir    = _src
+wsgi_app = "main:app"
+
 # ── Preload ───────────────────────────────────────────────────────────────────
 # MUST remain False.
 # Async SQLAlchemy engines and the Redis pool are created inside lifespan().
