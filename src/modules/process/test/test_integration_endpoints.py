@@ -268,7 +268,7 @@ def _sms_payload(csv_path: Path, n: int, campaign_id: int = 1) -> dict:
         "shortname": "TEST",
         "tariffId": 1,
         "campaignId": [campaign_id],
-        "subService": "standard",
+        "subService": "informative",
         "useExclusionList": False,
         "configFile": {
             "folder":               str(csv_path),

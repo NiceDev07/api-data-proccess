@@ -32,5 +32,6 @@ get_db_masivos_sms         = get_session_factory("masivos_sms")
 get_db_telefonos_campanas  = get_session_factory("telefonos_campanas")
 get_db_email               = get_session_factory("email")
 
+get_async_engine_campanas  = get_async_engine_factory("telefonos_campanas")
 get_sync_engine_campanas   = get_sync_engine_factory("telefonos_campanas")
 get_async_engine_email     = get_async_engine_factory("email")

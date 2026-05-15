@@ -197,3 +197,8 @@ cython_debug/
 .cursorindexingignore
 *.tasks*
 .vscode/
+skills.git
+CLAUDE.md
+SKILL.md
+postman-guide.md
+skills-lock.json

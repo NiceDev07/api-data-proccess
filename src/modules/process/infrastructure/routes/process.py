@@ -1,6 +1,7 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 from modules.process.domain.models.process_dto import DataProcessingDTO, SmsDataProcessingDTO
 from modules.process.domain.models.confirm_dto import ConfirmRequest
 from modules.process.domain.enums.services import ServiceType
@@ -18,8 +19,8 @@ from modules._common.infrastructure.db import (
     get_db_portabilidad,
     get_db_saem3,
     get_db_telefonos_campanas,
-    get_sync_engine_campanas,
-    get_async_engine_email,
+    get_async_engine_campanas,
+    get_sync_engine_email,
 )
 from modules.process.app.confirm.sms import SmsConfirmStrategy
 from modules.process.app.confirm.email import EmailConfirmStrategy
@@ -66,32 +67,37 @@ def get_use_case(
 
 async def _parse_payload(service: ServiceType, request: Request) -> DataProcessingDTO:
     body = await request.json()
-    if service == ServiceType.sms:
-        return SmsDataProcessingDTO.model_validate(body)
-    return DataProcessingDTO.model_validate(body)
+    try:
+        if service == ServiceType.sms:
+            return SmsDataProcessingDTO.model_validate(body)
+        return DataProcessingDTO.model_validate(body)
+    except ValidationError as exc:
+        first = exc.errors()[0]
+        detail = first["msg"].removeprefix("Value error, ")
+        raise HTTPException(status_code=400, detail=detail)
 
 
 @router.post(
     "/processing/{service}",
     summary="Procesar archivo de campaña",
     description=(
-        "Lee el archivo de campaña (CSV/XLSX), aplica normalización, exclusiones y cálculo "
-        "de créditos según el servicio indicado, y guarda el resultado en Parquet.\n\n"
+        "Procesa un archivo CSV o XLSX con registros de campaña para el servicio indicado.\n\n"
         "**Servicios disponibles:**\n"
-        "- `sms` — normaliza números, asigna operador, calcula PDU y créditos.\n"
-        "- `email` — valida direcciones, agrupa por dominio, aplica template HTML. "
-        "Requiere `subject` y `content` (HTML). El resultado se agrupa por dominio "
-        "(gmail, hotmail, yahoo, outlook, icloud, others).\n"
-        "- `call_blasting` — calcula duración de audio y créditos por segundo.\n\n"
-        "El archivo Parquet resultante queda disponible para el endpoint `/confirm/{service}`."
+        "- `sms` — valida números, asigna operador, calcula PDU y créditos. "
+        "`subService`: `informative` | `landing`.\n"
+        "- `email` — valida formato de correo, extrae dominio, calcula créditos. "
+        "`subService`: `standard`.\n"
+        "- `call_blasting` — valida números, calcula duración y créditos. "
+        "`subService`: `standard` | `custom`.\n\n"
+        "Retorna un resumen con totales por operador/dominio, créditos y registros excluidos. "
+        "El archivo procesado se guarda como Parquet para ser usado en el confirm."
     ),
     responses={
-        200: {"description": "Procesamiento exitoso. Retorna summaryGeneral y summaryGroup."},
-        400: {"description": "Parámetros inválidos (subject faltante, subService incorrecto, etc.)."},
-        404: {"description": "Archivo de campaña no encontrado."},
+        200: {"description": "Archivo procesado exitosamente. Retorna summaryGeneral, summaryGroup y violations."},
+        400: {"description": "Payload inválido, subService no permitido, shortname requerido o archivo no encontrado."},
         500: {"description": "Error interno del servidor."},
     },
-    tags=["Processing Service"],
+    tags=["Process Service"],
 )
 async def process_data(
     service: ServiceType,
@@ -112,12 +118,12 @@ async def process_data(
 def get_confirm_factory(
     shared: ProcessSharedDeps = Depends(get_shared_deps),
     db_telefonos_campanas=Depends(get_db_telefonos_campanas),
-    sync_engine_campanas: Engine = Depends(get_sync_engine_campanas),
-    async_engine_email: AsyncEngine = Depends(get_async_engine_email),
+    async_engine_campanas: AsyncEngine = Depends(get_async_engine_campanas),
+    sync_engine_email: Engine = Depends(get_sync_engine_email),
 ) -> ConfirmFactory:
     return ConfirmFactory({
         ServiceType.sms: SmsConfirmStrategy(
-            SmsConfirmRepository(db_telefonos_campanas, sync_engine_campanas), shared.storage
+            SmsConfirmRepository(db_telefonos_campanas, async_engine_campanas), shared.storage
         ),
         ServiceType.email: EmailConfirmStrategy(
             EmailConfirmRepository(async_engine_email), shared.storage

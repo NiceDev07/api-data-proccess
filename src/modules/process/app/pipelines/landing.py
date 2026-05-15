@@ -13,6 +13,6 @@ class Landing(IPipeline):
             return df
 
         if not _URL_RE.search(ctx.content):
-            raise ValueError("El contenido del mensaje debe incluir una URL para subservicios de tipo landing.")
+            raise ValueError("URL_REQUIRED: Message content must include a URL for landing sub-service.")
 
         return df

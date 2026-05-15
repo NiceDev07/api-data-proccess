@@ -27,13 +27,13 @@ _SMS_COLS = [
     Cols.credits,
 ]
 
-_REGULATION_DESCRIPTIONS: dict[str, str] = {
-    ExclusionReason.SHORTNAME_MISSING:       "El mensaje no contiene el shortname requerido",
-    ExclusionReason.SPECIAL_CHAR_NOT_ALLOWED: "El país de destino no permite caracteres especiales",
-    ExclusionReason.CHAR_LIMIT_EXCEEDED:     "El mensaje supera el límite de caracteres permitido",
+_ERROR_DESCRIPTIONS: dict[str, str] = {
+    ExclusionReason.EXCLUSION_LIST:           "Record found in exclusion list.",
+    ExclusionReason.INVALID_NUMBER_LENGTH:    "Number does not meet the required length.",
+    ExclusionReason.SHORTNAME_MISSING:        "Message does not contain the required shortname.",
+    ExclusionReason.SPECIAL_CHAR_NOT_ALLOWED: "Destination does not allow special characters.",
+    ExclusionReason.CHAR_LIMIT_EXCEEDED:      "Message exceeds the allowed character limit.",
 }
-
-_REGULATION_CODES = frozenset(_REGULATION_DESCRIPTIONS)
 
 
 class SmsProcessor(IDataProcessor):
@@ -64,8 +64,30 @@ class SmsProcessor(IDataProcessor):
 
         summary = self._build_summary(df)
         sg = summary.summaryGeneral
+
+        if sg.total_records == 0:
+            reasons = (
+                df.filter(pl.col(Cols.error_code).is_not_null())
+                .group_by(Cols.error_code)
+                .agg(pl.len().alias("affected"))
+                .to_dicts()
+            )
+            logger.warning(
+                "SMS completado | válidos: 0 | excluidos: %d | campaña: %s | reasons: %s",
+                sg.total_excluded, payload.campaignId,
+                [r[Cols.error_code] for r in reasons],
+            )
+            return {
+                "success": False,
+                "error": {
+                    "code": "NO_VALID_RECORDS",
+                    "reasons": [{"code": r[Cols.error_code], "affected": r["affected"]} for r in reasons],
+                },
+                **summary.model_dump(),
+            }
+
         logger.info(
-            "SMS completado | válidos: %d | excluidos: %d | créditos: %.4f | violaciones: %d",
+            "SMS completado | válidos: %d | excluidos: %d | créditos: %g | violaciones: %d",
             sg.total_records, sg.total_excluded, sg.total_credits, len(summary.violations),
         )
         return {"success": True, **summary.model_dump()}
@@ -74,14 +96,13 @@ class SmsProcessor(IDataProcessor):
         valid = df.filter(pl.col(Cols.is_ok))
 
         group_df = (
-            valid.group_by(Cols.cost_operator)
+            df.group_by(Cols.cost_operator)
             .agg(
-                pl.len().alias("total"),
-                pl.col(Cols.pdu).sum().alias("pdu"),
-                pl.col(Cols.credits).sum().alias("credits"),
-            )
-            .with_columns(
-                (pl.col("credits") / pl.col("total")).alias("unit_value")
+                pl.col(Cols.is_ok).sum().alias("total"),
+                (~pl.col(Cols.is_ok)).sum().alias("total_excluded"),
+                pl.col(Cols.pdu).filter(pl.col(Cols.is_ok)).sum().alias("pdu"),
+                pl.col(Cols.credits).filter(pl.col(Cols.is_ok)).sum().alias("credits"),
+                pl.col(Cols.cost).first().alias("unit_value"),
             )
             .sort("credits", descending=True)
         )
@@ -108,7 +129,7 @@ class SmsProcessor(IDataProcessor):
 
     def _build_violations(self, df: pl.DataFrame) -> list[RegulationViolation]:
         violations_df = (
-            df.filter(pl.col(Cols.error_code).is_in(_REGULATION_CODES))
+            df.filter(pl.col(Cols.error_code).is_in(list(_ERROR_DESCRIPTIONS)))
             .group_by(Cols.error_code)
             .agg(pl.len().alias("affected"))
         )
@@ -116,7 +137,7 @@ class SmsProcessor(IDataProcessor):
             RegulationViolation(
                 code=row[Cols.error_code],
                 affected=row["affected"],
-                description=_REGULATION_DESCRIPTIONS.get(row[Cols.error_code], row[Cols.error_code]),
+                description=_ERROR_DESCRIPTIONS.get(row[Cols.error_code], "Unexpected exclusion."),
             )
             for row in violations_df.to_dicts()
         ]
