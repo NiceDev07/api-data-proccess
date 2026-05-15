@@ -11,5 +11,9 @@ class CustomerExclusionSource:
         df = await reader.read(ctx.configListExclusion)
         col = ctx.configListExclusion.nameColumnDemographic
 
-        return df.select(pl.col(col).alias(col)) # DEBE FUNCIONAR PARA MAIL
+        lf = df if isinstance(df, pl.LazyFrame) else df.lazy()
+        try:
+            return lf.select(pl.col(col).alias(col)).collect()
+        except pl.exceptions.ColumnNotFoundError:
+            raise ValueError("COLUMN_NOT_FOUND: The demographic column was not found in the exclusion file.")
 
