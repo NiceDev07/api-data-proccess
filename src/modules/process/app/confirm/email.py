@@ -77,6 +77,9 @@ class EmailConfirmStrategy(BaseConfirmStrategy):
                   .otherwise(pl.lit(_STATUS_EXCLUDED))
                   .alias("status"),
                 ((pl.col("_idx") % 100) + 1).cast(pl.Utf8).alias("services"),
+                pl.lit("").alias("ip_client"),
+                pl.lit("").alias("country"),
+                pl.lit("").alias("city"),
             )
             .drop(cols_to_drop)
         )

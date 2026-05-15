@@ -1,108 +1,72 @@
 import asyncio
-import logging
-import os
-import tempfile
 
 import polars as pl
 from sqlalchemy import text
-from sqlalchemy.engine import Engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 
-logger = logging.getLogger(__name__)
+from logging_config import get_logger
 
-_LOAD_DATA_THRESHOLD = 10_000
-_INSERT_CHUNK = 5_000
+logger = get_logger(__name__)
+
+_CHUNK_ASYNC     = 10_000
+_MAX_CONCURRENCY = 8
 
 
 def _tbl(campaign_id: int) -> str:
-    """Nombre dinámico de tabla: mail_{id} — igual que el SP."""
     return f"mail_{campaign_id}"
 
 
 class EmailConfirmRepository:
-    """
-    Recibe el sync Engine del lifespan vía Depends().
-    No crea ni gestiona pools propios.
-    """
-
-    def __init__(self, engine: Engine):
+    def __init__(self, engine: AsyncEngine):
         self._engine = engine
 
-    async def assert_campaigns_exist(self, campaign_ids: list[int]) -> None:
-        missing = await asyncio.to_thread(self._sync_check_campaigns, campaign_ids)
-        if missing:
-            raise ValueError(
-                f"Las siguientes campañas no existen en mail_campaings.campaigns: {missing}"
-            )
-
     async def create_campaign_tables(self, campaign_ids: list[int]) -> None:
-        """Crea todas las tablas vía SP en un solo thread — N SP calls, 1 dispatch."""
-        await asyncio.to_thread(self._sync_create_tables, campaign_ids)
+        async with self._engine.begin() as conn:
+            await conn.execute(text("SET sql_notes = 0"))
+            for cid in campaign_ids:
+                await conn.execute(
+                    text("CALL `mail_campaings`.`create_mail_table`(:cid)"),
+                    {"cid": cid},
+                )
+            await conn.execute(text("SET sql_notes = 1"))
 
     async def bulk_insert(self, campaign_id: int, df: pl.DataFrame) -> int:
         if df.is_empty():
             return 0
 
-        if df.height >= _LOAD_DATA_THRESHOLD:
-            return await asyncio.to_thread(self._sync_load_data, campaign_id, df)
-
-        return await asyncio.to_thread(self._sync_batch_insert, campaign_id, df)
-
-    # ── sync helpers (corren en asyncio.to_thread) ────────────────────────────
-
-    def _sync_check_campaigns(self, campaign_ids: list[int]) -> list[int]:
-        placeholders = ", ".join(str(i) for i in campaign_ids)
-        with self._engine.connect() as conn:
-            rows = conn.execute(
-                text(f"SELECT id FROM `mail_campaings`.`campaigns` WHERE id IN ({placeholders})")
-            ).fetchall()
-        found = {row[0] for row in rows}
-        return [cid for cid in campaign_ids if cid not in found]
-
-    def _sync_create_tables(self, campaign_ids: list[int]) -> None:
-        """Llama al SP para cada campaña en una sola conexión."""
-        with self._engine.begin() as conn:
-            for cid in campaign_ids:
-                conn.execute(
-                    text("CALL `mail_campaings`.`create_mail_table`(:cid)"),
-                    {"cid": cid},
-                )
-
-    def _sync_load_data(self, campaign_id: int, df: pl.DataFrame) -> int:
-        """LOAD DATA LOCAL INFILE — vía más rápida para >= 10 000 filas."""
-        tbl = _tbl(campaign_id)
-        df = df.with_columns(pl.lit(campaign_id).alias("id_campaign"))
-        columns_str = ", ".join(f"`{c}`" for c in df.columns)
-        tmp_fd, tmp_path = tempfile.mkstemp(suffix=".tsv")
-        os.close(tmp_fd)
-        try:
-            df.write_csv(tmp_path, separator="\t", include_header=False, null_value="")
-            safe_path = tmp_path.replace("\\", "/")
-            load_sql = (
-                f"LOAD DATA LOCAL INFILE '{safe_path}' "
-                f"INTO TABLE `mail_campaings`.`{tbl}` "
-                f"CHARACTER SET utf8mb4 "
-                f"FIELDS TERMINATED BY '\\t' OPTIONALLY ENCLOSED BY '\"' "
-                f"LINES TERMINATED BY '\\n' ({columns_str})"
-            )
-            with self._engine.begin() as conn:
-                conn.execute(text(load_sql))
-        finally:
-            os.unlink(tmp_path)
-        return df.height
-
-    def _sync_batch_insert(self, campaign_id: int, df: pl.DataFrame) -> int:
-        """INSERT IGNORE multi-fila para < 10 000 filas."""
-        tbl = _tbl(campaign_id)
-        rows = df.with_columns(pl.lit(campaign_id).alias("id_campaign")).to_dicts()
-        cols = list(rows[0].keys())
-        cols_str = ", ".join(f"`{c}`" for c in cols)
-        bind_str = ", ".join(f":{c}" for c in cols)
-        stmt = text(
-            f"INSERT IGNORE INTO `mail_campaings`.`{tbl}` ({cols_str}) VALUES ({bind_str})"
+        df       = df.with_columns(pl.lit(campaign_id).alias("id_campaign"))
+        cols     = df.columns
+        cols_sql = ", ".join(f"`{c}`" for c in cols)
+        binds    = ", ".join(f":{c}" for c in cols)
+        stmt     = text(
+            f"INSERT IGNORE INTO `mail_campaings`.`{_tbl(campaign_id)}` ({cols_sql}) VALUES ({binds})"
         )
-        with self._engine.begin() as conn:
-            conn.execute(text("SET SESSION unique_checks=0, foreign_key_checks=0"))
-            for i in range(0, len(rows), _INSERT_CHUNK):
-                conn.execute(stmt, rows[i : i + _INSERT_CHUNK])
-            conn.execute(text("SET SESSION unique_checks=1, foreign_key_checks=1"))
+
+        queue: asyncio.Queue = asyncio.Queue(maxsize=_MAX_CONCURRENCY * 2)
+
+        async def _producer() -> None:
+            try:
+                for chunk in df.iter_slices(n_rows=_CHUNK_ASYNC):
+                    await queue.put(chunk)
+            finally:
+                for _ in range(_MAX_CONCURRENCY):
+                    await queue.put(None)
+
+        async def _worker() -> None:
+            async with self._engine.connect() as conn:
+                await conn.execute(text("SET SESSION unique_checks=0, foreign_key_checks=0"))
+                while True:
+                    chunk = await queue.get()
+                    if chunk is None:
+                        break
+                    await conn.execute(stmt, chunk.to_dicts())
+                    await conn.commit()
+                await conn.execute(text("SET SESSION unique_checks=1, foreign_key_checks=1"))
+                await conn.commit()
+
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(_producer())
+            for _ in range(_MAX_CONCURRENCY):
+                tg.create_task(_worker())
+
         return df.height

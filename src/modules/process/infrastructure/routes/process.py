@@ -126,7 +126,7 @@ def get_confirm_factory(
             SmsConfirmRepository(db_telefonos_campanas, async_engine_campanas), shared.storage
         ),
         ServiceType.email: EmailConfirmStrategy(
-            EmailConfirmRepository(sync_engine_email), shared.storage
+            EmailConfirmRepository(async_engine_email), shared.storage
         ),
         ServiceType.call_blasting: CallBlastingConfirmStrategy(shared.storage),
     })
