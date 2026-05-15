@@ -2,6 +2,7 @@ import polars as pl
 from modules.process.domain.interfaces.pipeline import IPipeline
 from modules.process.domain.models.process_dto import DataProcessingDTO
 from modules.process.domain.constants.cols import Cols
+from modules.process.domain.constants.reasons import ExclusionReason
 from modules.process.app.services.cost import CostService
 
 
@@ -67,7 +68,7 @@ class AssignCostCallBlasting(IPipeline):
         ini_cols  = [f"_i{plen}"   for plen in unique_lens]
         inc_cols  = [f"_inc{plen}" for plen in unique_lens]
 
-        return (
+        df = (
             df
             .with_columns(
                 pl.coalesce([pl.col(c) for c in cost_cols] + [pl.lit(self.default_cost)])
@@ -80,4 +81,13 @@ class AssignCostCallBlasting(IPipeline):
                 .alias(Cols.incremental),
             )
             .drop(cost_cols + op_cols + ini_cols + inc_cols)
+        )
+
+        no_cost = pl.col(Cols.cost_operator).eq("") & pl.col(Cols.is_ok)
+        return df.with_columns(
+            pl.when(no_cost).then(False).otherwise(pl.col(Cols.is_ok)).alias(Cols.is_ok),
+            pl.when(no_cost)
+              .then(pl.lit(ExclusionReason.NO_COST))
+              .otherwise(pl.col(Cols.error_code))
+              .alias(Cols.error_code),
         )
