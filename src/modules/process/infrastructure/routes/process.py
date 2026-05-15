@@ -2,7 +2,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
-from modules.process.domain.models.process_dto import DataProcessingDTO, SmsDataProcessingDTO
+from modules.process.domain.models.process_dto import DataProcessingDTO, SmsDataProcessingDTO, CallBlastingDataProcessingDTO
 from modules.process.domain.models.confirm_dto import ConfirmRequest
 from modules.process.domain.enums.services import ServiceType
 from modules.process.infrastructure.deps import ProcessSharedDeps
@@ -69,6 +69,8 @@ async def _parse_payload(service: ServiceType, request: Request) -> DataProcessi
     try:
         if service == ServiceType.sms:
             return SmsDataProcessingDTO.model_validate(body)
+        if service == ServiceType.call_blasting:
+            return CallBlastingDataProcessingDTO.model_validate(body)
         return DataProcessingDTO.model_validate(body)
     except ValidationError as exc:
         first = exc.errors()[0]

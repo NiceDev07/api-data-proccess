@@ -1,6 +1,6 @@
 from typing import List, Optional, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
-from modules.process.domain.enums.sub_services import SmsSubService
+from modules.process.domain.enums.sub_services import SmsSubService, CallBlastingSubService
 
 
 class RulesCountry(BaseModel):
@@ -55,6 +55,30 @@ class DataProcessingDTO(BaseModel):
     subject: Optional[str] = Field(None, description="Asunto del correo. Obligatorio para el servicio `email`.")
     audioDuration: Optional[float] = Field(None, description="Duración del audio en segundos. Requerido para `call_blasting` sub-servicio `standard` si no se provee `audioPath`.")
     audioPath: Optional[str] = Field(None, description="Ruta local al archivo de audio. Alternativa a `audioDuration` para `call_blasting standard`.")
+
+
+class CallBlastingDataProcessingDTO(DataProcessingDTO):
+    """
+    Payload para `POST /v2/processing/call_blasting`.
+
+    Extiende `DataProcessingDTO` con validaciones específicas de call blasting:
+    - `subService` debe ser `"standard"` o `"custom"`.
+    - Para `standard`: se requiere `audioDuration` o `audioPath`.
+    """
+
+    @field_validator("subService")
+    @classmethod
+    def subservice_valid(cls, v: str) -> str:
+        if v not in {s.value for s in CallBlastingSubService}:
+            raise ValueError("INVALID_SUB_SERVICE: sub-service not allowed for call blasting.")
+        return v
+
+    @model_validator(mode="after")
+    def validate_audio_source(self) -> "CallBlastingDataProcessingDTO":
+        if self.subService == CallBlastingSubService.standard.value:
+            if self.audioDuration is None and not self.audioPath:
+                raise ValueError("AUDIO_SOURCE_REQUIRED: audioDuration or audioPath is required for standard sub-service.")
+        return self
 
 
 class SmsDataProcessingDTO(DataProcessingDTO):

@@ -71,16 +71,20 @@ class CostRepository:
         if service not in columns_map:
             raise ValueError(f"Servicio no soportado para call blasting: {service}")
 
+        cost_col = columns_map[service]
         stmt = (
             select(
                 TelCost.prefix,
-                columns_map[service].label("cost"),
+                cost_col.label("cost"),
                 TelCost.operator.label("cost_operator"),
                 TelCost.initial,
                 TelCost.incremental,
             )
             .where(TelCost.country_id == country_id)
             .where(TelCost.tariff_id == tariff_id)
+            .where(cost_col.isnot(None))
+            .where(TelCost.initial.isnot(None))
+            .where(TelCost.incremental.isnot(None))
         )
 
         result = await self.session.execute(stmt)
