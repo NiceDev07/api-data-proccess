@@ -20,7 +20,7 @@ from modules._common.infrastructure.db import (
     get_db_saem3,
     get_db_telefonos_campanas,
     get_async_engine_campanas,
-    get_sync_engine_email,
+    get_async_engine_email,
 )
 from modules.process.app.confirm.sms import SmsConfirmStrategy
 from modules.process.app.confirm.email import EmailConfirmStrategy
@@ -28,7 +28,6 @@ from modules.process.app.confirm.call_blasting import CallBlastingConfirmStrateg
 from modules.process.app.confirm.factory import ConfirmFactory
 from modules.process.infrastructure.repositories.sms_confirm import SmsConfirmRepository
 from modules.process.infrastructure.repositories.email_confirm import EmailConfirmRepository
-from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 logger = logging.getLogger(__name__)
@@ -119,7 +118,7 @@ def get_confirm_factory(
     shared: ProcessSharedDeps = Depends(get_shared_deps),
     db_telefonos_campanas=Depends(get_db_telefonos_campanas),
     async_engine_campanas: AsyncEngine = Depends(get_async_engine_campanas),
-    sync_engine_email: Engine = Depends(get_sync_engine_email),
+    async_engine_email: AsyncEngine = Depends(get_async_engine_email),
 ) -> ConfirmFactory:
     return ConfirmFactory({
         ServiceType.sms: SmsConfirmStrategy(
