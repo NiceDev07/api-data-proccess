@@ -38,7 +38,7 @@ class BaseConfirmStrategy(ABC):
     async def _confirm_and_cleanup(self, path: Path, campaign_ids: list[int]) -> dict[str, Any]:
         result = await self._do_confirm(path, campaign_ids)
         try:
-            path.unlink()
+            path.unlink(missing_ok=True)
         except Exception:
-            logger.warning("Confirm [%s] | no se pudo eliminar el parquet | path=%s", self._service_name, path)
+            logger.warning("Confirm [%s] | no se pudo eliminar | path=%s", self._service_name, path)
         return result

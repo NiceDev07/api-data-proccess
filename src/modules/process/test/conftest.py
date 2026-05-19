@@ -161,13 +161,15 @@ def make_ctx(
     audio_path:      str   | None = None,
     tariff_id:       int   = 1,
     campaign_id:     list[int] | None = None,
+    code_group:      str   = "test_grp_001",
     subject:         str   | None = None,
 ) -> DataProcessingDTO:
     return DataProcessingDTO(
         content=content,
         shortname=shortname,
         tariffId=tariff_id,
-        campaignId=campaign_id or [999],
+        campaignId=campaign_id or [],
+        codeGroup=code_group,
         subService=sub_service,
         useExclusionList=use_exclusion,
         configListExclusion=excl_config,

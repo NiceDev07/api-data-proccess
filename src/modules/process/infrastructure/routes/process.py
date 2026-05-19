@@ -1,3 +1,4 @@
+import copy
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -67,8 +68,6 @@ def get_use_case(
     )
 
 def _inline_schema_refs(schema: dict) -> dict:
-    """Resuelve los $ref locales de Pydantic ($defs) dejando el schema auto-contenido."""
-    import copy
     schema = copy.deepcopy(schema)
     defs = schema.pop("$defs", {})
 
@@ -87,6 +86,31 @@ def _inline_schema_refs(schema: dict) -> dict:
 
 
 _PROCESSING_BODY_SCHEMA = _inline_schema_refs(DataProcessingDTO.model_json_schema())
+_CONFIRM_BODY_SCHEMA = _inline_schema_refs(ConfirmRequest.model_json_schema())
+
+_CONFIRM_EXAMPLES = {
+    "sms": {
+        "summary": "SMS",
+        "value": {
+            "campaignId": [229960],
+            "codeGroup": "KXQM7291",
+        },
+    },
+    "email": {
+        "summary": "Email",
+        "value": {
+            "campaignId": [229961],
+            "codeGroup": "BRTV4508",
+        },
+    },
+    "call_blasting": {
+        "summary": "Call Blasting",
+        "value": {
+            "campaignId": [229962],
+            "codeGroup": "LPWZ6134",
+        },
+    },
+}
 
 _PROCESSING_EXAMPLES = {
     "sms_informativo": {
@@ -95,6 +119,7 @@ _PROCESSING_EXAMPLES = {
             "content": "Estimado {nombre}, tiene una notificación pendiente.",
             "tariffId": 1,
             "campaignId": [999001],
+            "codeGroup": "KXQM7291",
             "subService": "informative",
             "useExclusionList": False,
             "configListExclusion": None,
@@ -125,6 +150,7 @@ _PROCESSING_EXAMPLES = {
             "subject": "Notificación de su cuenta",
             "tariffId": 1,
             "campaignId": [999002],
+            "codeGroup": "BRTV4508",
             "subService": "standard",
             "useExclusionList": False,
             "configListExclusion": None,
@@ -154,6 +180,7 @@ _PROCESSING_EXAMPLES = {
             "content": "Estimado {nombre}, tiene una notificación pendiente en su cuenta.",
             "tariffId": 1,
             "campaignId": [999003],
+            "codeGroup": "LPWZ6134",
             "subService": "standard",
             "audioDuration": 20,
             "audioPath": None,
@@ -185,6 +212,7 @@ _PROCESSING_EXAMPLES = {
             "content": "Estimado {nombre}, su saldo es {saldo} con fecha {fecha}.",
             "tariffId": 1,
             "campaignId": [999004],
+            "codeGroup": "NFHJ8823",
             "subService": "custom",
             "audioDuration": None,
             "audioPath": None,
@@ -213,16 +241,25 @@ _PROCESSING_EXAMPLES = {
 }
 
 
+def _format_validation_error(exc: ValidationError) -> str:
+    error = exc.errors()[0]
+    msg = error["msg"].removeprefix("Value error, ")
+    field = error.get("loc", ())[-1] if error.get("loc") else None
+    return f"{field}: {msg}" if field else msg
+
+
+_DTO_BY_SERVICE = {
+    ServiceType.sms: SmsDataProcessingDTO,
+    ServiceType.call_blasting: CallBlastingDataProcessingDTO,
+}
+
 async def _parse_payload(service: ServiceType, request: Request) -> DataProcessingDTO:
     body = await request.json()
+    dto_class = _DTO_BY_SERVICE.get(service, DataProcessingDTO)
     try:
-        if service == ServiceType.sms:
-            return SmsDataProcessingDTO.model_validate(body)
-        if service == ServiceType.call_blasting:
-            return CallBlastingDataProcessingDTO.model_validate(body)
-        return DataProcessingDTO.model_validate(body)
+        return dto_class.model_validate(body)
     except ValidationError as exc:
-        raise HTTPException(status_code=400, detail=exc.errors()[0]["msg"].removeprefix("Value error, "))
+        raise HTTPException(status_code=400, detail=_format_validation_error(exc))
 
 
 async def _parse_confirm_payload(request: Request) -> ConfirmRequest:
@@ -230,7 +267,7 @@ async def _parse_confirm_payload(request: Request) -> ConfirmRequest:
     try:
         return ConfirmRequest.model_validate(body)
     except ValidationError as exc:
-        raise HTTPException(status_code=400, detail=exc.errors()[0]["msg"].removeprefix("Value error, "))
+        raise HTTPException(status_code=400, detail=_format_validation_error(exc))
 
 
 @router.post(
@@ -330,9 +367,11 @@ def get_confirm_factory(
         "**SMS** — Inserta en telefonos_campanas usando LOAD DATA LOCAL INFILE por lotes.\n\n"
         "**Email** — Crea la tabla mail_{campaignId} si no existe e inserta con INSERT IGNORE.\n\n"
         "**Call Blasting** — Crea la tabla en PostgreSQL e inserta con ON CONFLICT DO NOTHING.\n\n"
+        "### Payload requerido\n"
+        "- **codeGroup**: el mismo valor enviado en processing. Se usa para localizar el Parquet.\n"
+        "- **campaignId**: lista con al menos un ID de campaña. Se usa para nombrar las tablas e insertar registros.\n\n"
         "### Cómo se busca el archivo\n"
-        "Si se envía codeGroup, se busca primero el Parquet con ese nombre. "
-        "Si no existe o no se envió, se busca por los IDs de campaña concatenados."
+        "Se busca el Parquet por codeGroup. Si no existe, se busca por los IDs de campaña concatenados."
     ),
     responses={
         200: {"description": "Registros insertados. Retorna inserted con el total de filas confirmadas."},
@@ -341,6 +380,17 @@ def get_confirm_factory(
         500: {"description": "Error interno del servidor."},
     },
     tags=["Confirm"],
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": _CONFIRM_BODY_SCHEMA,
+                    "examples": _CONFIRM_EXAMPLES,
+                }
+            },
+        }
+    },
 )
 async def confirm_campaign(
     service: ServiceType,

@@ -1,6 +1,7 @@
 from typing import List, Optional, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 from modules.process.domain.enums.sub_services import SmsSubService, CallBlastingSubService
+from modules.process.domain.utils import normalize_col_name
 
 
 
@@ -23,11 +24,21 @@ class BaseFileConfig(BaseModel):
     useHeaders: bool = Field(..., description="Si `true`, la primera fila se usa como encabezado.")
     nameColumnDemographic: str = Field(..., description="Nombre de la columna que contiene el número/email.")
 
+    @field_validator("nameColumnDemographic")
+    @classmethod
+    def _normalize_demographic(cls, v: str) -> str:
+        return normalize_col_name(v)
+
 
 class ConfigFile(BaseFileConfig):
     userIdentifier: bool = Field(..., description="Si `true`, el archivo incluye columna de identificación.")
     nameColumnIdentifier: str = Field(..., description="Nombre de la columna de identificación. Requerido si `userIdentifier=true`.")
     fileRecords: int = Field(..., description="Total de registros en el archivo declarado por el cliente (sin contar encabezado). Es metadata informativa — el sistema valida el conteo real al leer el archivo.", examples=[200000])
+
+    @field_validator("nameColumnIdentifier")
+    @classmethod
+    def _normalize_identifier(cls, v: str) -> str:
+        return normalize_col_name(v)
 
 
 class ConfigListExclusion(BaseFileConfig):
@@ -51,20 +62,13 @@ class DataProcessingDTO(BaseModel):
     content: str = Field(..., description="Plantilla del mensaje. Puede incluir etiquetas `{columna}` para personalización.", examples=["Hola {nombre}, tu código es {codigo}."])
     shortname: Optional[str] = Field(None, description="Remitente SMS. Obligatorio solo cuando `rulesCountry.useShortName=true` y debe estar incluido en `content`.")
     tariffId: int = Field(..., description="ID de la tarifa a aplicar para el cálculo de créditos.", examples=[1])
-    campaignId: List[int] = Field(..., description="Lista de IDs de campaña. Se usa como nombre del archivo Parquet resultante.", examples=[[999001]])
-    codeGroup: Optional[str] = Field(None, description="Clave de grupo alternativa para nombrar el archivo Parquet. Tiene prioridad sobre `campaignId`. Mínimo 8 caracteres si se provee.")
-
-    @field_validator("campaignId")
-    @classmethod
-    def validate_campaign_id(cls, v: List[int]) -> List[int]:
-        if not v:
-            raise ValueError("CAMPAIGN_ID_REQUIRED: campaignId must contain at least one ID.")
-        return v
+    campaignId: List[int] = Field(default_factory=list, description="IDs de campaña. Opcional cuando se envía codeGroup.", examples=[[999001]])
+    codeGroup: str = Field(..., description="Identificador de grupo para nombrar el archivo Parquet. Tiene prioridad sobre campaignId. Mínimo 8 caracteres.")
 
     @field_validator("codeGroup")
     @classmethod
-    def validate_code_group(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and len(v.strip()) < 8:
+    def validate_code_group(cls, v: str) -> str:
+        if len(v.strip()) < 8:
             raise ValueError("INVALID_CODE_GROUP: codeGroup must be at least 8 characters.")
         return v
     configFile: ConfigFile = Field(..., description="Configuración del archivo de datos a procesar.")
