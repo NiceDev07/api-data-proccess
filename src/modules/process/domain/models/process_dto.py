@@ -1,6 +1,5 @@
 from typing import List, Optional, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
-
 from modules.process.domain.enums.sub_services import SmsSubService, CallBlastingSubService
 
 
@@ -52,21 +51,15 @@ class DataProcessingDTO(BaseModel):
     content: str = Field(..., description="Plantilla del mensaje. Puede incluir etiquetas `{columna}` para personalización.", examples=["Hola {nombre}, tu código es {codigo}."])
     shortname: Optional[str] = Field(None, description="Remitente SMS. Obligatorio solo cuando `rulesCountry.useShortName=true` y debe estar incluido en `content`.")
     tariffId: int = Field(..., description="ID de la tarifa a aplicar para el cálculo de créditos.", examples=[1])
-    campaignId: List[int] = Field(default_factory=list, description="Lista de IDs de campaña. Se usa como nombre del archivo Parquet resultante.", examples=[[999001]])
-    codeGroup: Optional[str] = Field(None, description="Clave de grupo alternativa para nombrar el archivo Parquet. Tiene prioridad sobre `campaignId`. Mínimo 8 caracteres si se provee.")
+    campaignId: List[int] = Field(default_factory=list, description="IDs de campaña. Opcional cuando se envía codeGroup.", examples=[[999001]])
+    codeGroup: str = Field(..., description="Identificador de grupo para nombrar el archivo Parquet. Tiene prioridad sobre campaignId. Mínimo 8 caracteres.")
 
     @field_validator("codeGroup")
     @classmethod
-    def validate_code_group(cls, v: Optional[str]) -> Optional[str]:
-        if v is not None and len(v.strip()) < 8:
+    def validate_code_group(cls, v: str) -> str:
+        if len(v.strip()) < 8:
             raise ValueError("INVALID_CODE_GROUP: codeGroup must be at least 8 characters.")
         return v
-
-    @model_validator(mode="after")
-    def validate_campaign_id_or_code_group(self) -> "DataProcessingDTO":
-        if not self.campaignId and not self.codeGroup:
-            raise ValueError("CAMPAIGN_ID_REQUIRED: Provide campaignId or codeGroup.")
-        return self
     configFile: ConfigFile = Field(..., description="Configuración del archivo de datos a procesar.")
     useExclusionList: bool = Field(..., description="Si `true`, se aplica la lista de exclusión definida en `configListExclusion`.")
     configListExclusion: Optional[ConfigListExclusion] = Field(None, description="Configuración del archivo de exclusión. Requerido si `useExclusionList=true`.")

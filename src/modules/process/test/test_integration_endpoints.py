@@ -268,6 +268,7 @@ def _sms_payload(csv_path: Path, n: int, campaign_id: int = 1) -> dict:
         "shortname": "TEST",
         "tariffId": 1,
         "campaignId": [campaign_id],
+        "codeGroup": f"test_sms_{campaign_id:04d}",
         "subService": "informative",
         "useExclusionList": False,
         "configFile": {
@@ -303,6 +304,7 @@ def _email_payload(csv_path: Path, n: int, campaign_id: int = 2) -> dict:
         "shortname": "TEST",
         "tariffId": 1,
         "campaignId": [campaign_id],
+        "codeGroup": f"test_eml_{campaign_id:04d}",
         "subService": "standard",
         "useExclusionList": False,
         "subject": "Asunto de prueba",
@@ -333,8 +335,9 @@ def _email_payload(csv_path: Path, n: int, campaign_id: int = 2) -> dict:
     }
 
 
-def _confirm_payload(campaign_id: int) -> dict:
-    return {"campaignId": [campaign_id]}
+def _confirm_payload(campaign_id: int, service: str = "sms") -> dict:
+    prefix = "eml" if service == "email" else "sms"
+    return {"campaignId": [campaign_id], "codeGroup": f"test_{prefix}_{campaign_id:04d}"}
 
 
 # ---------------------------------------------------------------------------
@@ -447,7 +450,7 @@ async def test_processing_invalid_service(client: AsyncClient):
 
 @pytest.mark.anyio
 async def test_confirm_file_not_found(client: AsyncClient):
-    resp = await client.post("/v2/confirm/sms", json={"campaignId": [99999]})
+    resp = await client.post("/v2/confirm/sms", json={"campaignId": [99999], "codeGroup": "nonexistent_grp"})
     assert resp.status_code == 404
 
 
@@ -593,7 +596,7 @@ async def test_confirm_email_real_db(tmp_path: Path):
     try:
         t0 = time.perf_counter()
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.post("/v2/confirm/email", json={"campaignId": [CAMPAIGN_ID]})
+            resp = await client.post("/v2/confirm/email", json={"campaignId": [CAMPAIGN_ID], "codeGroup": f"test_eml_{CAMPAIGN_ID:04d}"})
         elapsed = time.perf_counter() - t0
     finally:
         sync_engine.dispose()

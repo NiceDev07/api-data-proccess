@@ -92,6 +92,7 @@ def setup_logging(level: Optional[int] = None) -> None:
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
     logging.getLogger("sqlalchemy.pool").setLevel(logging.WARNING)
     logging.getLogger("asyncio").setLevel(logging.WARNING)
+    logging.getLogger("asyncmy").setLevel(logging.ERROR)
 
 
 def get_logger(name: str) -> logging.Logger:

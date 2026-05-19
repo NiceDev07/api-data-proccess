@@ -1,3 +1,4 @@
+import copy
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -67,8 +68,6 @@ def get_use_case(
     )
 
 def _inline_schema_refs(schema: dict) -> dict:
-    """Resuelve los $ref locales de Pydantic ($defs) dejando el schema auto-contenido."""
-    import copy
     schema = copy.deepcopy(schema)
     defs = schema.pop("$defs", {})
 
@@ -95,6 +94,7 @@ _PROCESSING_EXAMPLES = {
             "content": "Estimado {nombre}, tiene una notificación pendiente.",
             "tariffId": 1,
             "campaignId": [999001],
+            "codeGroup": "KXQM7291",
             "subService": "informative",
             "useExclusionList": False,
             "configListExclusion": None,
@@ -125,6 +125,7 @@ _PROCESSING_EXAMPLES = {
             "subject": "Notificación de su cuenta",
             "tariffId": 1,
             "campaignId": [999002],
+            "codeGroup": "BRTV4508",
             "subService": "standard",
             "useExclusionList": False,
             "configListExclusion": None,
@@ -154,6 +155,7 @@ _PROCESSING_EXAMPLES = {
             "content": "Estimado {nombre}, tiene una notificación pendiente en su cuenta.",
             "tariffId": 1,
             "campaignId": [999003],
+            "codeGroup": "LPWZ6134",
             "subService": "standard",
             "audioDuration": 20,
             "audioPath": None,
@@ -185,6 +187,7 @@ _PROCESSING_EXAMPLES = {
             "content": "Estimado {nombre}, su saldo es {saldo} con fecha {fecha}.",
             "tariffId": 1,
             "campaignId": [999004],
+            "codeGroup": "NFHJ8823",
             "subService": "custom",
             "audioDuration": None,
             "audioPath": None,
@@ -213,16 +216,25 @@ _PROCESSING_EXAMPLES = {
 }
 
 
+def _format_validation_error(exc: ValidationError) -> str:
+    error = exc.errors()[0]
+    msg = error["msg"].removeprefix("Value error, ")
+    field = error.get("loc", ())[-1] if error.get("loc") else None
+    return f"{field}: {msg}" if field else msg
+
+
+_DTO_BY_SERVICE = {
+    ServiceType.sms: SmsDataProcessingDTO,
+    ServiceType.call_blasting: CallBlastingDataProcessingDTO,
+}
+
 async def _parse_payload(service: ServiceType, request: Request) -> DataProcessingDTO:
     body = await request.json()
+    dto_class = _DTO_BY_SERVICE.get(service, DataProcessingDTO)
     try:
-        if service == ServiceType.sms:
-            return SmsDataProcessingDTO.model_validate(body)
-        if service == ServiceType.call_blasting:
-            return CallBlastingDataProcessingDTO.model_validate(body)
-        return DataProcessingDTO.model_validate(body)
+        return dto_class.model_validate(body)
     except ValidationError as exc:
-        raise HTTPException(status_code=400, detail=exc.errors()[0]["msg"].removeprefix("Value error, "))
+        raise HTTPException(status_code=400, detail=_format_validation_error(exc))
 
 
 async def _parse_confirm_payload(request: Request) -> ConfirmRequest:
@@ -230,7 +242,7 @@ async def _parse_confirm_payload(request: Request) -> ConfirmRequest:
     try:
         return ConfirmRequest.model_validate(body)
     except ValidationError as exc:
-        raise HTTPException(status_code=400, detail=exc.errors()[0]["msg"].removeprefix("Value error, "))
+        raise HTTPException(status_code=400, detail=_format_validation_error(exc))
 
 
 @router.post(

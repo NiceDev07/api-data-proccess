@@ -1,4 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 # from modules.data_processing.infrastructure.routes.preload_camp import router as preload_router
 from modules.process.infrastructure.routes.process import router as process_router
 from config.settings import settings
@@ -48,6 +50,14 @@ def create_app() -> FastAPI:
             },
         ],
     )
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+        error = exc.errors()[0]
+        loc = error.get("loc", ())
+        if loc and loc[0] == "path":
+            return JSONResponse(status_code=400, content={"detail": error["msg"]})
+        return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
     # app.include_router(preload_router, prefix=settings.PREFIX_APP, tags=["Data Processing Service"])
     app.include_router(process_router, prefix=settings.PREFIX_APP)
     return app
