@@ -54,6 +54,13 @@ class DataProcessingDTO(BaseModel):
     campaignId: List[int] = Field(..., description="Lista de IDs de campaña. Se usa como nombre del archivo Parquet resultante.", examples=[[999001]])
     codeGroup: Optional[str] = Field(None, description="Clave de grupo alternativa para nombrar el archivo Parquet. Tiene prioridad sobre `campaignId`. Mínimo 8 caracteres si se provee.")
 
+    @field_validator("campaignId")
+    @classmethod
+    def validate_campaign_id(cls, v: List[int]) -> List[int]:
+        if not v:
+            raise ValueError("CAMPAIGN_ID_REQUIRED: campaignId must contain at least one ID.")
+        return v
+
     @field_validator("codeGroup")
     @classmethod
     def validate_code_group(cls, v: Optional[str]) -> Optional[str]:
