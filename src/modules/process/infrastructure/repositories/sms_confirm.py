@@ -8,29 +8,6 @@ from logging_config import get_logger
 
 logger = get_logger(__name__)
 
-_CHUNK_ASYNC     = 10_000
-_MAX_CONCURRENCY = 8
-
-# Tabla sin índices secundarios — se agregan al finalizar el bulk insert
-# para evitar actualización fila a fila durante la inserción masiva.
-_CREATE_TABLE_SQL = """
-    CREATE TABLE IF NOT EXISTS `campana_{campaign_id}` (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        celular VARCHAR(18) NOT NULL,
-        id_campana INT NOT NULL DEFAULT '{campaign_id}',
-        estado ENUM('C','F','P','E','B','X','A','D') NOT NULL DEFAULT 'P',
-        codigo_corto VARCHAR(10),
-        texto TEXT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL,
-        identificacion VARCHAR(250) NOT NULL,
-        servicio VARCHAR(3) NOT NULL,
-        codigo_respuesta VARCHAR(40),
-        fecha_envio DATETIME,
-        operador VARCHAR(40),
-        respuesta_operador VARCHAR(20),
-        pdu INT NOT NULL DEFAULT 0,
-        credit FLOAT NOT NULL DEFAULT 0.0
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-"""
 
 
 class SmsConfirmRepository:
@@ -44,7 +21,10 @@ class SmsConfirmRepository:
     async def create_campaign_tables(self, campaign_ids: list[int]) -> None:
         await self._session.execute(text("SET sql_notes = 0"))
         for campaign_id in campaign_ids:
-            await self._session.execute(text(_CREATE_TABLE_SQL.format(campaign_id=campaign_id)))
+            await self._session.execute(
+                text("CALL `telefonos_campanas`.`create_campaign_table`(:id_camp)"),
+                {"id_camp": campaign_id},
+            )
         await self._session.execute(text("SET sql_notes = 1"))
         await self._session.commit()
 
