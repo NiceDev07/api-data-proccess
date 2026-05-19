@@ -28,7 +28,7 @@ class NumeracionRepository(INumeracionRepository):
 
             if not rows:
                 logger.error("Sin datos de numeración para country_id=%s", country_id)
-                raise RuntimeError("numeration_not_found")
+                raise RuntimeError(f"numeration_not_found: no hay rangos configurados para el país {country_id}")
 
             return rows
         except RuntimeError:

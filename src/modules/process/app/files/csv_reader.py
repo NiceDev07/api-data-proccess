@@ -36,8 +36,8 @@ class CsvReader(IFileReader):
         try:
             return await asyncio.to_thread(_load)
         except FileNotFoundError:
-            raise FileNotFoundError(f"No se encontró el archivo CSV en: {file_path}")
+            raise FileNotFoundError("FILE_NOT_FOUND: Campaign file not found.")
         except UnicodeDecodeError:
-            raise ValueError(f"Error de codificación al leer el archivo CSV: {file_path}")
+            raise ValueError("FILE_READ_ERROR: Encoding error while reading the campaign file.")
         except Exception as e:
-            raise ValueError(f"Error al leer CSV '{file_path}': {str(e)}")
+            raise ValueError("FILE_READ_ERROR: Error reading the campaign file.")

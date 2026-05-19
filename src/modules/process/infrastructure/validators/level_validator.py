@@ -15,20 +15,19 @@ class LevelValidator(IUserLevelValidator):
             df = lf.collect()
             if df.height > self.max_records_elevated:
                 raise ValueError(
-                    f"El archivo supera el límite máximo permitido de "
-                    f"{self.max_records_elevated:,} registros. "
-                    f"Se recibieron {df.height:,}."
+                    f"MAX_RECORDS_EXCEEDED: File exceeds the maximum allowed limit of "
+                    f"{self.max_records_elevated:,} records. Received {df.height:,}."
                 )
             return df.lazy()
 
         # ── Nivel 1: modo prueba — solo las N filas necesarias ───────────────
         demographic = payload.infoUserValidSend.demographic
-        if demographic is None:
-            raise ValueError("Nivel 1: el valor demográfico del usuario no está definido.")
+        if not demographic:
+            raise ValueError("DEMOGRAPHIC_REQUIRED: The user demographic value is not defined for level 1.")
 
         number_col = payload.configFile.nameColumnDemographic
         if number_col not in lf.collect_schema():
-            raise ValueError(f"Nivel 1: la columna '{number_col}' no existe en los datos.")
+            raise ValueError(f"COLUMN_NOT_FOUND: The column '{number_col}' does not exist in the file.")
 
         df = lf.head(self.max_records).collect()
         df = df.with_columns(
@@ -40,7 +39,7 @@ class LevelValidator(IUserLevelValidator):
         bad = df.filter(mism).select(pl.col(number_col)).head(3).to_series().to_list()
         if bad:
             raise ValueError(
-                "El archivo contiene registros que no corresponden al número autorizado para pruebas."
+                "UNAUTHORIZED_RECORDS: The file contains records that do not match the authorized number for level 1 testing."
             )
 
         return df.lazy()
