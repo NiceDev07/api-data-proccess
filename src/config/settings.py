@@ -1,5 +1,8 @@
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from enum import Enum
+
+_ENV_FILE = Path(__file__).parent.parent.parent / ".env"
 
 class EnvironmentEnum(Enum):
         dev = "dev"
@@ -18,6 +21,7 @@ class Settings(BaseSettings):
     DB_MASIVOS_SMS: str = "mysql+mysqlconnector://user:pass@host:port/database"
     DB_TELEFONOS_CAMPANAS: str = "mysql+mysqlconnector://user:pass@host:port/database"
     DB_EMAIL: str = "mysql+mysqlconnector://user:pass@host:port/database"
+    DB_CALLB: str = "postgresql+asyncpg://user:pass@host:port/database"
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # Límite máximo de registros por campaña para usuarios de nivel > 1.
@@ -25,8 +29,8 @@ class Settings(BaseSettings):
     MAX_CAMPAIGN_RECORDS: int = 700_000
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        extra="ignore"  # Permite la existencia de variables extra
+        env_file=str(_ENV_FILE),
+        extra="ignore"
     )
 
 settings = Settings()

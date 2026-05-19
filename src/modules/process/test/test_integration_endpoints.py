@@ -241,7 +241,7 @@ def test_app(storage_dir: Path) -> FastAPI:
             ServiceType.email: EmailConfirmStrategy(
                 repo=email_repo, storage=storage
             ),
-            ServiceType.call_blasting: CallBlastingConfirmStrategy(storage=storage),
+            ServiceType.call_blasting: CallBlastingConfirmStrategy(repo=MagicMock(), storage=storage),
         })
 
     app.dependency_overrides[get_use_case]        = _make_use_case
@@ -268,7 +268,7 @@ def _sms_payload(csv_path: Path, n: int, campaign_id: int = 1) -> dict:
         "shortname": "TEST",
         "tariffId": 1,
         "campaignId": [campaign_id],
-        "subService": "standard",
+        "subService": "informative",
         "useExclusionList": False,
         "configFile": {
             "folder":               str(csv_path),
@@ -581,7 +581,7 @@ async def test_confirm_email_real_db(tmp_path: Path):
             ServiceType.sms: SmsConfirmStrategy(
                 repo=_sms_repo_mock(), storage=storage
             ),
-            ServiceType.call_blasting: CallBlastingConfirmStrategy(storage=storage),
+            ServiceType.call_blasting: CallBlastingConfirmStrategy(repo=MagicMock(), storage=storage),
         })
 
     app = FastAPI()

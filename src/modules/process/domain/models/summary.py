@@ -14,6 +14,7 @@ class RegulationViolation(BaseModel):
 class SummaryGroup(BaseModel):
     operator: str
     total: int
+    total_excluded: int
     pdu: int
     credits: float
     unit_value: float  # costo promedio por registro (credits / total)

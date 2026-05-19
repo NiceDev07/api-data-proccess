@@ -80,7 +80,7 @@ class EmailProcessor(IDataProcessor):
         summary = self._build_summary(df)
         sg = summary.summaryGeneral
         logger.info(
-            "Email completado | válidos: %d | excluidos: %d | créditos: %.4f",
+            "Email completado | válidos: %d | excluidos: %d | créditos: %g",
             sg.total_records, sg.total_excluded, sg.total_credits,
         )
         return {"success": True, **summary.model_dump()}
@@ -96,7 +96,7 @@ class EmailProcessor(IDataProcessor):
 
         general_lf = valid_lf.select(
             pl.len().alias("total_records"),
-            pl.col(Cols.credits).sum().alias("total_credits"),
+            pl.col(Cols.credits).sum().round(3).alias("total_credits"),
         )
         group_lf = (
             df.lazy()
@@ -105,8 +105,8 @@ class EmailProcessor(IDataProcessor):
             .agg(
                 pl.col(Cols.is_ok).sum().alias("total"),
                 (~pl.col(Cols.is_ok)).sum().alias("total_excluded"),
-                pl.col(Cols.cost).first().alias("unit_value"),
-                pl.col(Cols.credits).filter(pl.col(Cols.is_ok)).sum().alias("credits"),
+                pl.col(Cols.cost).first().round(3).alias("unit_value"),
+                pl.col(Cols.credits).filter(pl.col(Cols.is_ok)).sum().round(3).alias("credits"),
             )
             .sort("credits", descending=True)
         )

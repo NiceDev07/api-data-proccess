@@ -274,25 +274,43 @@ class TestAssignCost:
 # AssignCostCallBlasting
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _cb_df(numbers: list[str]) -> pl.DataFrame:
+    return pl.DataFrame({
+        Cols.number_concat: numbers,
+        Cols.is_ok:         [True] * len(numbers),
+        Cols.error_code:    [""] * len(numbers),
+    })
+
+
 class TestAssignCostCallBlasting:
     async def test_assigns_all_four_fields(self):
-        df = pl.DataFrame({Cols.number_concat: ["573005973563"]})
+        df = _cb_df(["573005973563"])
         mock = MagicMock()
         mock.get_costs_cb = AsyncMock(return_value=[("57", 60.0, "COLOMBIA", 30.0, 15.0)])
         ctx = make_ctx(sub_service="standard")
         result = await AssignCostCallBlasting(mock).execute(df, ctx)
-        assert result[Cols.cost][0]        == pytest.approx(60.0)
+        assert result[Cols.cost][0]          == pytest.approx(60.0)
         assert result[Cols.cost_operator][0] == "COLOMBIA"
-        assert result[Cols.initial][0]     == pytest.approx(30.0)
-        assert result[Cols.incremental][0] == pytest.approx(15.0)
+        assert result[Cols.initial][0]       == pytest.approx(30.0)
+        assert result[Cols.incremental][0]   == pytest.approx(15.0)
+        assert result[Cols.is_ok][0] is True
 
     async def test_empty_table_returns_zeros(self):
-        df = pl.DataFrame({Cols.number_concat: ["573005973563"]})
+        df = _cb_df(["573005973563"])
         mock = MagicMock()
         mock.get_costs_cb = AsyncMock(return_value=[])
         result = await AssignCostCallBlasting(mock).execute(df, make_ctx())
-        assert result[Cols.cost][0] == pytest.approx(0.0)
+        assert result[Cols.cost][0]    == pytest.approx(0.0)
         assert result[Cols.initial][0] == pytest.approx(0.0)
+
+    async def test_no_cost_match_marks_excluded(self):
+        """Número sin tarifa configurada se excluye con NO_COST."""
+        df = _cb_df(["999999999999"])
+        mock = MagicMock()
+        mock.get_costs_cb = AsyncMock(return_value=[("57", 60.0, "COLOMBIA", 30.0, 15.0)])
+        result = await AssignCostCallBlasting(mock).execute(df, make_ctx())
+        assert result[Cols.is_ok][0] is False
+        assert result[Cols.error_code][0] == "NO_COST"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -830,3 +848,44 @@ class TestCalculateCreditsEmail:
         df = pl.DataFrame({Cols.cost: [0.123456]})
         result = await CalculateCreditsEmail().execute(df, make_ctx())
         assert result[Cols.credits][0] == pytest.approx(0.123, abs=1e-3)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CustomSubject — error codes
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCustomSubject:
+    async def test_missing_subject_raises_with_code(self):
+        from modules.process.app.pipelines.custom_subject import CustomSubject
+        df = pl.DataFrame({Cols.email: ["a@b.com"]})
+        ctx = make_ctx(subject=None)
+        with pytest.raises(ValueError, match="SUBJECT_REQUIRED"):
+            await CustomSubject().execute(df, ctx)
+
+    async def test_subject_present_adds_column(self):
+        from modules.process.app.pipelines.custom_subject import CustomSubject
+        df = pl.DataFrame({Cols.email: ["a@b.com"]})
+        ctx = make_ctx(subject="Hola")
+        result = await CustomSubject().execute(df, ctx)
+        assert Cols.subject in (result.collect_schema().names() if isinstance(result, pl.LazyFrame) else result.columns)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CleanDataEmail — error codes
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCleanDataEmailErrors:
+    async def test_missing_column_raises_with_code(self):
+        df = pl.DataFrame({"otro_campo": ["a@b.com"]})
+        ctx = make_ctx(demographic="email")
+        with pytest.raises(ValueError, match="COLUMN_NOT_FOUND"):
+            await CleanDataEmail(EmailNormalizer()).execute(df, ctx)
+
+    async def test_missing_column_does_not_expose_available_columns(self):
+        df = pl.DataFrame({"otro_campo": ["a@b.com"]})
+        ctx = make_ctx(demographic="email")
+        with pytest.raises(ValueError) as exc_info:
+            await CleanDataEmail(EmailNormalizer()).execute(df, ctx)
+        assert "otro_campo" not in str(exc_info.value)
+
+

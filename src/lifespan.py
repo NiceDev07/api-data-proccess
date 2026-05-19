@@ -61,17 +61,16 @@ async def lifespan(app: FastAPI):
         ),
     }
 
-    # Engines síncronos para los confirm (LOAD DATA / batch INSERT en threads).
-    # Son los únicos que necesitan pymysql + local_infile.
+    logger.info("Inicializando pool async de PostgreSQL (call blasting)...")
+    pg_engines = {
+        "callb": create_async_engine(settings.DB_CALLB, **_ASYNC_ENGINE_ARGS),
+    }
+
+    # Engine síncrono solo para campanas (pymysql + local_infile).
     logger.info("Inicializando pools sync de MySQL...")
     sync_engines = {
         "telefonos_campanas": create_engine(
             _sync_dsn(settings.DB_TELEFONOS_CAMPANAS),
-            connect_args={"local_infile": True, "charset": "utf8mb4"},
-            **_SYNC_ENGINE_ARGS,
-        ),
-        "email": create_engine(
-            _sync_dsn(settings.DB_EMAIL),
             connect_args={"local_infile": True, "charset": "utf8mb4"},
             **_SYNC_ENGINE_ARGS,
         ),
@@ -121,6 +120,7 @@ async def lifespan(app: FastAPI):
     }
 
     app.state.engines           = engines
+    app.state.pg_engines        = pg_engines
     app.state.sync_engines      = sync_engines
     app.state.session_factories = session_factories
     app.state.redis             = redis_client
@@ -131,7 +131,7 @@ async def lifespan(app: FastAPI):
     finally:
         # ── Shutdown ──────────────────────────────────────────────────────────
         logger.info("Cerrando async engines...")
-        for name, engine in engines.items():
+        for name, engine in {**engines, **pg_engines}.items():
             try:
                 await engine.dispose()
                 logger.info("Async engine %s cerrado", name)
