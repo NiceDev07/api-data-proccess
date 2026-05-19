@@ -61,13 +61,13 @@ class CallBlastingProcessor(IDataProcessor):
             CallBlastingSubService.standard: common + [
                 CalculateDurationStandard(duration_provider),
                 CalculateCreditsCallBlasting(),
-                SaveResults(_OUTPUT_COLS[CallBlastingSubService.standard], storage, service="CallBlasting"),
+                SaveResults(_OUTPUT_COLS[CallBlastingSubService.standard], storage, service="call_blasting"),
             ],
             CallBlastingSubService.custom: common + [
                 CustomMessage(),
                 CalculateDurationCustom(),
                 CalculateCreditsCallBlasting(),
-                SaveResults(_OUTPUT_COLS[CallBlastingSubService.custom], storage, service="CallBlasting"),
+                SaveResults(_OUTPUT_COLS[CallBlastingSubService.custom], storage, service="call_blasting"),
             ],
         }
 
@@ -87,7 +87,7 @@ class CallBlastingProcessor(IDataProcessor):
         summary = self._build_summary(df)
         sg = summary.summaryGeneral
         logger.info(
-            "CallBlasting completado | válidos: %d | excluidos: %d | segundos: %d | créditos: %.4f",
+            "CallBlasting completado | válidos: %d | excluidos: %d | segundos: %d | créditos: %g",
             sg.total_records, sg.total_excluded, sg.total_seconds, sg.total_credits,
         )
         return {"success": True, **summary.model_dump()}
@@ -100,10 +100,10 @@ class CallBlastingProcessor(IDataProcessor):
             .agg(
                 pl.len().alias("total"),
                 pl.col(Cols.seconds).sum().alias("seconds"),
-                pl.col(Cols.credits).sum().alias("credits"),
+                pl.col(Cols.credits).sum().round(3).alias("credits"),
             )
             .with_columns(
-                (pl.col("credits") / pl.col("total")).alias("unit_value")
+                (pl.col("credits") / pl.col("total")).round(3).alias("unit_value")
             )
             .sort("credits", descending=True)
         )
@@ -111,7 +111,7 @@ class CallBlastingProcessor(IDataProcessor):
         general_row = valid.select(
             pl.len().alias("total_records"),
             pl.col(Cols.seconds).sum().alias("total_seconds"),
-            pl.col(Cols.credits).sum().alias("total_credits"),
+            pl.col(Cols.credits).sum().round(3).alias("total_credits"),
         ).row(0, named=True)
 
         return CBCampaignSummary(

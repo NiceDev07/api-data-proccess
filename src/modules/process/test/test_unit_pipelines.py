@@ -274,25 +274,43 @@ class TestAssignCost:
 # AssignCostCallBlasting
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _cb_df(numbers: list[str]) -> pl.DataFrame:
+    return pl.DataFrame({
+        Cols.number_concat: numbers,
+        Cols.is_ok:         [True] * len(numbers),
+        Cols.error_code:    [""] * len(numbers),
+    })
+
+
 class TestAssignCostCallBlasting:
     async def test_assigns_all_four_fields(self):
-        df = pl.DataFrame({Cols.number_concat: ["573005973563"]})
+        df = _cb_df(["573005973563"])
         mock = MagicMock()
         mock.get_costs_cb = AsyncMock(return_value=[("57", 60.0, "COLOMBIA", 30.0, 15.0)])
         ctx = make_ctx(sub_service="standard")
         result = await AssignCostCallBlasting(mock).execute(df, ctx)
-        assert result[Cols.cost][0]        == pytest.approx(60.0)
+        assert result[Cols.cost][0]          == pytest.approx(60.0)
         assert result[Cols.cost_operator][0] == "COLOMBIA"
-        assert result[Cols.initial][0]     == pytest.approx(30.0)
-        assert result[Cols.incremental][0] == pytest.approx(15.0)
+        assert result[Cols.initial][0]       == pytest.approx(30.0)
+        assert result[Cols.incremental][0]   == pytest.approx(15.0)
+        assert result[Cols.is_ok][0] is True
 
     async def test_empty_table_returns_zeros(self):
-        df = pl.DataFrame({Cols.number_concat: ["573005973563"]})
+        df = _cb_df(["573005973563"])
         mock = MagicMock()
         mock.get_costs_cb = AsyncMock(return_value=[])
         result = await AssignCostCallBlasting(mock).execute(df, make_ctx())
-        assert result[Cols.cost][0] == pytest.approx(0.0)
+        assert result[Cols.cost][0]    == pytest.approx(0.0)
         assert result[Cols.initial][0] == pytest.approx(0.0)
+
+    async def test_no_cost_match_marks_excluded(self):
+        """Número sin tarifa configurada se excluye con NO_COST."""
+        df = _cb_df(["999999999999"])
+        mock = MagicMock()
+        mock.get_costs_cb = AsyncMock(return_value=[("57", 60.0, "COLOMBIA", 30.0, 15.0)])
+        result = await AssignCostCallBlasting(mock).execute(df, make_ctx())
+        assert result[Cols.is_ok][0] is False
+        assert result[Cols.error_code][0] == "NO_COST"
 
 
 # ─────────────────────────────────────────────────────────────────────────────

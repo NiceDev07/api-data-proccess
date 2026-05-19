@@ -10,6 +10,8 @@ class ExclusionReason:
     INVALID_NUMBER_LENGTH: Final[str] = "INVALID_NUMBER_LENGTH"
     # Email con formato inválido
     INVALID_EMAIL: Final[str] = "INVALID_EMAIL"
+    # Sin tarifa configurada para el número (call blasting)
+    NO_COST: Final[str] = "NO_COST"
     # Violaciones de regulación SMS
     SHORTNAME_MISSING: Final[str] = "SHORTNAME_MISSING"
     SPECIAL_CHAR_NOT_ALLOWED: Final[str] = "SPECIAL_CHAR_NOT_ALLOWED"
