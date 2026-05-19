@@ -86,6 +86,31 @@ def _inline_schema_refs(schema: dict) -> dict:
 
 
 _PROCESSING_BODY_SCHEMA = _inline_schema_refs(DataProcessingDTO.model_json_schema())
+_CONFIRM_BODY_SCHEMA = _inline_schema_refs(ConfirmRequest.model_json_schema())
+
+_CONFIRM_EXAMPLES = {
+    "sms": {
+        "summary": "SMS",
+        "value": {
+            "campaignId": [229960],
+            "codeGroup": "KXQM7291",
+        },
+    },
+    "email": {
+        "summary": "Email",
+        "value": {
+            "campaignId": [229961],
+            "codeGroup": "BRTV4508",
+        },
+    },
+    "call_blasting": {
+        "summary": "Call Blasting",
+        "value": {
+            "campaignId": [229962],
+            "codeGroup": "LPWZ6134",
+        },
+    },
+}
 
 _PROCESSING_EXAMPLES = {
     "sms_informativo": {
@@ -342,9 +367,11 @@ def get_confirm_factory(
         "**SMS** — Inserta en telefonos_campanas usando LOAD DATA LOCAL INFILE por lotes.\n\n"
         "**Email** — Crea la tabla mail_{campaignId} si no existe e inserta con INSERT IGNORE.\n\n"
         "**Call Blasting** — Crea la tabla en PostgreSQL e inserta con ON CONFLICT DO NOTHING.\n\n"
+        "### Payload requerido\n"
+        "- **codeGroup**: el mismo valor enviado en processing. Se usa para localizar el Parquet.\n"
+        "- **campaignId**: lista con al menos un ID de campaña. Se usa para nombrar las tablas e insertar registros.\n\n"
         "### Cómo se busca el archivo\n"
-        "Si se envía codeGroup, se busca primero el Parquet con ese nombre. "
-        "Si no existe o no se envió, se busca por los IDs de campaña concatenados."
+        "Se busca el Parquet por codeGroup. Si no existe, se busca por los IDs de campaña concatenados."
     ),
     responses={
         200: {"description": "Registros insertados. Retorna inserted con el total de filas confirmadas."},
@@ -353,6 +380,17 @@ def get_confirm_factory(
         500: {"description": "Error interno del servidor."},
     },
     tags=["Confirm"],
+    openapi_extra={
+        "requestBody": {
+            "required": True,
+            "content": {
+                "application/json": {
+                    "schema": _CONFIRM_BODY_SCHEMA,
+                    "examples": _CONFIRM_EXAMPLES,
+                }
+            },
+        }
+    },
 )
 async def confirm_campaign(
     service: ServiceType,
