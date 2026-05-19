@@ -3,6 +3,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from modules.process.domain.enums.sub_services import SmsSubService, CallBlastingSubService
 
 
+
+
 class RulesCountry(BaseModel):
     idCountry: int = Field(..., description="ID del país en la base de numeración.", examples=[81])
     codeCountry: int = Field(..., description="Código telefónico del país (sin +).", examples=[57])
@@ -25,7 +27,7 @@ class BaseFileConfig(BaseModel):
 class ConfigFile(BaseFileConfig):
     userIdentifier: bool = Field(..., description="Si `true`, el archivo incluye columna de identificación.")
     nameColumnIdentifier: str = Field(..., description="Nombre de la columna de identificación. Requerido si `userIdentifier=true`.")
-    fileRecords: int = Field(..., description="Total de registros en el archivo (sin contar encabezado).", examples=[200000])
+    fileRecords: int = Field(..., description="Total de registros en el archivo declarado por el cliente (sin contar encabezado). Es metadata informativa — el sistema valida el conteo real al leer el archivo.", examples=[200000])
 
 
 class ConfigListExclusion(BaseFileConfig):
@@ -40,12 +42,24 @@ class InfoUserValidSend(BaseModel):
     demographic: str = Field(..., description="Número o email del usuario para validación de nivel 1. Vacío en nivel 2+.")
 
 
+class ConfigLabel(BaseModel):
+    nameLabel: str = Field(..., description="Nombre del placeholder tal como aparece en `content` entre llaves.")
+    typeLabel: str = Field(..., description="Tipo TTS del valor: `N` (nombre), `S` (string), `M` (monto), etc. Usar `undefined` para no aplicar tipo.")
+
+
 class DataProcessingDTO(BaseModel):
     content: str = Field(..., description="Plantilla del mensaje. Puede incluir etiquetas `{columna}` para personalización.", examples=["Hola {nombre}, tu código es {codigo}."])
     shortname: Optional[str] = Field(None, description="Remitente SMS. Obligatorio solo cuando `rulesCountry.useShortName=true` y debe estar incluido en `content`.")
     tariffId: int = Field(..., description="ID de la tarifa a aplicar para el cálculo de créditos.", examples=[1])
     campaignId: List[int] = Field(..., description="Lista de IDs de campaña. Se usa como nombre del archivo Parquet resultante.", examples=[[999001]])
-    codeGroup: Optional[str] = Field(None, description="Clave de grupo alternativa para nombrar el archivo Parquet. Tiene prioridad sobre `campaignId`.")
+    codeGroup: Optional[str] = Field(None, description="Clave de grupo alternativa para nombrar el archivo Parquet. Tiene prioridad sobre `campaignId`. Mínimo 8 caracteres si se provee.")
+
+    @field_validator("codeGroup")
+    @classmethod
+    def validate_code_group(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v.strip()) < 8:
+            raise ValueError("INVALID_CODE_GROUP: codeGroup must be at least 8 characters.")
+        return v
     configFile: ConfigFile = Field(..., description="Configuración del archivo de datos a procesar.")
     useExclusionList: bool = Field(..., description="Si `true`, se aplica la lista de exclusión definida en `configListExclusion`.")
     configListExclusion: Optional[ConfigListExclusion] = Field(None, description="Configuración del archivo de exclusión. Requerido si `useExclusionList=true`.")
@@ -55,6 +69,15 @@ class DataProcessingDTO(BaseModel):
     subject: Optional[str] = Field(None, description="Asunto del correo. Obligatorio para el servicio `email`.")
     audioDuration: Optional[float] = Field(None, description="Duración del audio en segundos. Requerido para `call_blasting` sub-servicio `standard` si no se provee `audioPath`.")
     audioPath: Optional[str] = Field(None, description="Ruta local al archivo de audio. Alternativa a `audioDuration` para `call_blasting standard`.")
+    configLabels: List[ConfigLabel] = Field(
+        default_factory=list,
+        description=(
+            "Tipado TTS por placeholder. Exclusivo de `call_blasting` `custom`. "
+            "Cada entrada indica cómo debe pronunciar el motor TTS el valor de ese campo. "
+            "Ejemplo: `{nombre}` con tipo `N` se convierte en `{N:Carlos}` en el mensaje final. "
+            "Enviar lista vacía `[]` cuando no se requiere tipado TTS."
+        ),
+    )
 
 
 class CallBlastingDataProcessingDTO(DataProcessingDTO):

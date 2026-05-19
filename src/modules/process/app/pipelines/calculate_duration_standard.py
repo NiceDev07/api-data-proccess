@@ -30,7 +30,7 @@ class CalculateDurationStandard(IPipeline):
             seconds = await self._provider.get_duration(ctx.audioPath)
         else:
             raise ValueError(
-                "Se requiere 'audioDuration' o 'audioPath' para call_blasting_standard."
+                "AUDIO_SOURCE_REQUIRED: 'audioDuration' or 'audioPath' is required for call_blasting standard."
             )
 
         duration = max(1, math.ceil(seconds)) + OPERATION_MARGIN_SECS
