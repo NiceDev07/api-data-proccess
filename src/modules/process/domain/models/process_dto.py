@@ -1,6 +1,7 @@
 from typing import List, Optional, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 from modules.process.domain.enums.sub_services import SmsSubService, CallBlastingSubService
+from modules.process.domain.utils import normalize_col_name
 
 
 
@@ -23,11 +24,21 @@ class BaseFileConfig(BaseModel):
     useHeaders: bool = Field(..., description="Si `true`, la primera fila se usa como encabezado.")
     nameColumnDemographic: str = Field(..., description="Nombre de la columna que contiene el número/email.")
 
+    @field_validator("nameColumnDemographic")
+    @classmethod
+    def _normalize_demographic(cls, v: str) -> str:
+        return normalize_col_name(v)
+
 
 class ConfigFile(BaseFileConfig):
     userIdentifier: bool = Field(..., description="Si `true`, el archivo incluye columna de identificación.")
     nameColumnIdentifier: str = Field(..., description="Nombre de la columna de identificación. Requerido si `userIdentifier=true`.")
     fileRecords: int = Field(..., description="Total de registros en el archivo declarado por el cliente (sin contar encabezado). Es metadata informativa — el sistema valida el conteo real al leer el archivo.", examples=[200000])
+
+    @field_validator("nameColumnIdentifier")
+    @classmethod
+    def _normalize_identifier(cls, v: str) -> str:
+        return normalize_col_name(v)
 
 
 class ConfigListExclusion(BaseFileConfig):
