@@ -29,6 +29,7 @@ from modules.process.app.confirm.call_blasting import CallBlastingConfirmStrateg
 from modules.process.app.confirm.factory import ConfirmFactory
 from modules.process.infrastructure.repositories.sms_confirm import SmsConfirmRepository
 from modules.process.infrastructure.repositories.email_confirm import EmailConfirmRepository
+from modules.process.infrastructure.repositories.callblasting_confirm import CallBlastingConfirmRepository
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 logger = logging.getLogger(__name__)
@@ -221,9 +222,15 @@ async def _parse_payload(service: ServiceType, request: Request) -> DataProcessi
             return CallBlastingDataProcessingDTO.model_validate(body)
         return DataProcessingDTO.model_validate(body)
     except ValidationError as exc:
-        first = exc.errors()[0]
-        detail = first["msg"].removeprefix("Value error, ")
-        raise HTTPException(status_code=400, detail=detail)
+        raise HTTPException(status_code=400, detail=exc.errors()[0]["msg"].removeprefix("Value error, "))
+
+
+async def _parse_confirm_payload(request: Request) -> ConfirmRequest:
+    body = await request.json()
+    try:
+        return ConfirmRequest.model_validate(body)
+    except ValidationError as exc:
+        raise HTTPException(status_code=400, detail=exc.errors()[0]["msg"].removeprefix("Value error, "))
 
 
 @router.post(
@@ -304,7 +311,9 @@ def get_confirm_factory(
         ServiceType.email: EmailConfirmStrategy(
             EmailConfirmRepository(async_engine_email), shared.storage
         ),
-        ServiceType.call_blasting: CallBlastingConfirmStrategy(shared.storage),
+        ServiceType.call_blasting: CallBlastingConfirmStrategy(
+            CallBlastingConfirmRepository(async_engine_callb), shared.storage
+        ),
     })
 
 
@@ -335,7 +344,7 @@ def get_confirm_factory(
 )
 async def confirm_campaign(
     service: ServiceType,
-    payload: ConfirmRequest,
+    payload: ConfirmRequest = Depends(_parse_confirm_payload),
     factory: ConfirmFactory = Depends(get_confirm_factory),
 ):
     try:
