@@ -15,10 +15,7 @@ class CleanDataEmail(IPipeline):
         c = ctx.configFile.nameColumnDemographic
         schema = df.collect_schema() if isinstance(df, pl.LazyFrame) else df.schema
         if c not in schema:
-            raise ValueError(
-                f"La columna '{c}' no existe en el archivo. "
-                f"Columnas disponibles: {schema.names()}"
-            )
+            raise ValueError(f"COLUMN_NOT_FOUND: The column '{c}' does not exist in the file.")
         return (
             df.with_columns(self.normalizer.normalize(c))
               .filter(pl.col(c).is_not_null())

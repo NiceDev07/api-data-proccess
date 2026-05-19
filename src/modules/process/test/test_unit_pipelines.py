@@ -848,3 +848,44 @@ class TestCalculateCreditsEmail:
         df = pl.DataFrame({Cols.cost: [0.123456]})
         result = await CalculateCreditsEmail().execute(df, make_ctx())
         assert result[Cols.credits][0] == pytest.approx(0.123, abs=1e-3)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CustomSubject — error codes
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCustomSubject:
+    async def test_missing_subject_raises_with_code(self):
+        from modules.process.app.pipelines.custom_subject import CustomSubject
+        df = pl.DataFrame({Cols.email: ["a@b.com"]})
+        ctx = make_ctx(subject=None)
+        with pytest.raises(ValueError, match="SUBJECT_REQUIRED"):
+            await CustomSubject().execute(df, ctx)
+
+    async def test_subject_present_adds_column(self):
+        from modules.process.app.pipelines.custom_subject import CustomSubject
+        df = pl.DataFrame({Cols.email: ["a@b.com"]})
+        ctx = make_ctx(subject="Hola")
+        result = await CustomSubject().execute(df, ctx)
+        assert Cols.subject in (result.collect_schema().names() if isinstance(result, pl.LazyFrame) else result.columns)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CleanDataEmail — error codes
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCleanDataEmailErrors:
+    async def test_missing_column_raises_with_code(self):
+        df = pl.DataFrame({"otro_campo": ["a@b.com"]})
+        ctx = make_ctx(demographic="email")
+        with pytest.raises(ValueError, match="COLUMN_NOT_FOUND"):
+            await CleanDataEmail(EmailNormalizer()).execute(df, ctx)
+
+    async def test_missing_column_does_not_expose_available_columns(self):
+        df = pl.DataFrame({"otro_campo": ["a@b.com"]})
+        ctx = make_ctx(demographic="email")
+        with pytest.raises(ValueError) as exc_info:
+            await CleanDataEmail(EmailNormalizer()).execute(df, ctx)
+        assert "otro_campo" not in str(exc_info.value)
+
+

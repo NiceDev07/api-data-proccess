@@ -3,6 +3,9 @@ from pathlib import Path
 from typing import Any
 
 from modules.process.infrastructure.storage.local import LocalStorage
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class BaseConfirmStrategy(ABC):
@@ -23,12 +26,19 @@ class BaseConfirmStrategy(ABC):
         if code_group:
             path = self._build_path(code_group)
             if path.exists():
-                return await self._do_confirm(path, campaign_ids)
+                return await self._confirm_and_cleanup(path, campaign_ids)
 
         fallback_key = "-".join(str(c) for c in campaign_ids)
         path = self._build_path(fallback_key)
         if not path.exists():
-            raise FileNotFoundError(
-                f"Archivo de campaña no encontrado: {path.name}"
-            )
-        return await self._do_confirm(path, campaign_ids)
+            logger.error("Confirm [%s] | archivo no encontrado | campaigns=%s | path=%s", self._service_name, campaign_ids, path)
+            raise FileNotFoundError("FILE_NOT_FOUND: Campaign file not found.")
+        return await self._confirm_and_cleanup(path, campaign_ids)
+
+    async def _confirm_and_cleanup(self, path: Path, campaign_ids: list[int]) -> dict[str, Any]:
+        result = await self._do_confirm(path, campaign_ids)
+        try:
+            path.unlink()
+        except Exception:
+            logger.warning("Confirm [%s] | no se pudo eliminar el parquet | path=%s", self._service_name, path)
+        return result

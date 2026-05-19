@@ -101,8 +101,8 @@ class SmsProcessor(IDataProcessor):
                 pl.col(Cols.is_ok).sum().alias("total"),
                 (~pl.col(Cols.is_ok)).sum().alias("total_excluded"),
                 pl.col(Cols.pdu).filter(pl.col(Cols.is_ok)).sum().alias("pdu"),
-                pl.col(Cols.credits).filter(pl.col(Cols.is_ok)).sum().alias("credits"),
-                pl.col(Cols.cost).first().alias("unit_value"),
+                pl.col(Cols.credits).filter(pl.col(Cols.is_ok)).sum().round(3).alias("credits"),
+                pl.col(Cols.cost).first().round(3).alias("unit_value"),
             )
             .sort("credits", descending=True)
         )
@@ -110,7 +110,7 @@ class SmsProcessor(IDataProcessor):
         general_row = valid.select(
             pl.len().alias("total_records"),
             pl.col(Cols.pdu).sum().alias("total_pdu"),
-            pl.col(Cols.credits).sum().alias("total_credits"),
+            pl.col(Cols.credits).sum().round(3).alias("total_credits"),
         ).row(0, named=True)
 
         violations = self._build_violations(df)

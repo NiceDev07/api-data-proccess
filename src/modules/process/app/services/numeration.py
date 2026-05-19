@@ -1,5 +1,8 @@
 import numpy as np
 from modules._common.domain.interfaces.cache import ICache
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 class NumerationService:
     KEY_CACHE = "numeration:v1"
@@ -21,12 +24,14 @@ class NumerationService:
         cached = await self.cache.get(key_cache)
 
         if cached is not None:
+            logger.debug("Numeración obtenida desde caché para country_id=%s", country_id)
             return (
                 np.array(cached["starts"], dtype=np.int64),
                 np.array(cached["ends"], dtype=np.int64),
                 np.array(cached["operators"], dtype=object),
             )
 
+        logger.info("Consultando numeración en BD para country_id=%s", country_id)
         ranges = await self.numeration_repo.get_numeracion(country_id)
         sorted_ranges = sorted(ranges, key=lambda r: r[0])
         starts = np.array([r[0] for r in sorted_ranges], dtype=np.int64)

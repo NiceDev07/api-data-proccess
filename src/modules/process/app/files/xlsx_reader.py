@@ -23,6 +23,6 @@ class XlsxReader(IFileReader):
         try:
             return await asyncio.to_thread(_load)
         except FileNotFoundError:
-            raise FileNotFoundError(f"No se encontró el archivo XLSX en: {file_path}")
+            raise FileNotFoundError("FILE_NOT_FOUND: Campaign file not found.")
         except Exception as e:
-            raise ValueError(f"Error al leer XLSX '{file_path}': {str(e)}")
+            raise ValueError("FILE_READ_ERROR: Error reading the campaign file.")
