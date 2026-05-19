@@ -8,7 +8,8 @@ from logging_config import get_logger
 
 logger = get_logger(__name__)
 
-
+_CHUNK_ASYNC     = 10_000
+_MAX_CONCURRENCY = 8
 
 class SmsConfirmRepository:
     def __init__(self, session: AsyncSession, async_engine: AsyncEngine):
@@ -68,16 +69,4 @@ class SmsConfirmRepository:
             for _ in range(_MAX_CONCURRENCY):
                 tg.create_task(_worker())
 
-        await self._add_indexes(campaign_id)
         return df.height
-
-    async def _add_indexes(self, campaign_id: int) -> None:
-        async with self._engine.begin() as conn:
-            await conn.execute(text(
-                f"CREATE INDEX IF NOT EXISTS idx_estado_celular "
-                f"ON `campana_{campaign_id}` (estado, celular)"
-            ))
-            await conn.execute(text(
-                f"CREATE INDEX IF NOT EXISTS idx_id_campana "
-                f"ON `campana_{campaign_id}` (id_campana)"
-            ))
