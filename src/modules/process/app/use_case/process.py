@@ -3,7 +3,14 @@ from modules.process.domain.interfaces.level_validator import IUserLevelValidato
 from modules.process.app.interfaces import (IFileReaderFactory, IProcessorFactory)
 from modules.process.domain.enums.services import ServiceType
 
+
 class ProcessDataUseCase:
+    """Orquesta la lectura del archivo, la validación de nivel y el procesamiento.
+
+    No hace transformaciones de columnas — esa responsabilidad pertenece a cada
+    processor específico (EmailProcessor, SmsProcessor, etc.).
+    """
+
     def __init__(
         self,
         processor_factory: IProcessorFactory,
@@ -16,7 +23,7 @@ class ProcessDataUseCase:
 
     async def __call__(
         self,
-        service: ServiceType, 
+        service: ServiceType,
         payload: DataProcessingDTO
     ):
         processor = self.processor_factory.create(service)

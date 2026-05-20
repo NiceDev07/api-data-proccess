@@ -17,5 +17,16 @@ class SaveResults(IPipeline):
             df = df.collect(engine="streaming")
         key = ctx.codeGroup if ctx.codeGroup else "-".join(str(c) for c in ctx.campaignId)
         filename = f"Campaign/{self.service}/campaign_{key}.parquet"
-        await self.storage.save(df.select(self.cols + self._AUDIT_COLS), filename)
+        save_cols = self.cols + self._AUDIT_COLS
+
+        # Si el identificador está en la lista de columnas esperadas, lo excluimos
+        # del parquet cuando: (a) la columna no llegó al DataFrame (SMS/CallBlasting
+        # que aún no implementan el feature), o (b) llegó pero está completamente vacía.
+        if Cols.identifier in save_cols:
+            if Cols.identifier not in df.columns or (
+                df[Cols.identifier].cast(pl.Utf8).str.strip_chars().eq("").all()
+            ):
+                save_cols = [c for c in save_cols if c != Cols.identifier]
+
+        await self.storage.save(df.select(save_cols), filename)
         return df

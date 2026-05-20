@@ -26,6 +26,7 @@ _EMAIL_COLS = [
     Cols.cost,
     Cols.credits,
     Cols.email_domain,
+    Cols.identifier,
 ]
 
 _KNOWN_DOMAINS = frozenset([
@@ -62,6 +63,13 @@ class EmailProcessor(IDataProcessor):
         logger.info("Email iniciado | campaña: %s", payload.campaignId)
         if not isinstance(lf, pl.LazyFrame):
             lf = lf.lazy()
+
+        col = payload.configFile.nameColumnIdentifier
+        lf = lf.with_columns(
+            pl.col(col).cast(pl.Utf8).str.strip_chars().str.to_lowercase().alias(Cols.identifier)
+            if col and col in lf.collect_schema()
+            else pl.lit("").alias(Cols.identifier)
+        )
 
         # Pre_steps (filter + rename): streaming añade overhead en planes simples;
         # se materializan con collect() estándar sobre datos ya en memoria.

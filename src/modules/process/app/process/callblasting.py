@@ -26,6 +26,7 @@ _OUTPUT_COLS: dict[CallBlastingSubService, list[str]] = {
         Cols.number_operator,
         Cols.seconds,
         Cols.credits,
+        Cols.identifier,
     ],
     CallBlastingSubService.custom: [
         Cols.number_concat,
@@ -33,6 +34,7 @@ _OUTPUT_COLS: dict[CallBlastingSubService, list[str]] = {
         Cols.message,
         Cols.seconds,
         Cols.credits,
+        Cols.identifier,
     ],
 }
 
