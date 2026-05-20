@@ -1,12 +1,12 @@
 from typing import Dict, Any
 import polars as pl
-
 from modules.process.domain.interfaces.process import IDataProcessor
 from modules.process.domain.interfaces.storage import IStorage
 from modules.process.domain.models.process_dto import DataProcessingDTO
 from modules.process.domain.models.summary import EmailCampaignSummary, EmailSummaryGeneral, EmailSummaryGroup
 from modules.process.domain.constants.cols import Cols
 from modules.process.app.normalizers.email import EmailNormalizer
+from modules.process.app.helpers import attach_identifier
 from modules.process.app.pipelines import CustomMessage, SaveResults
 from modules.process.app.pipelines.custom_subject import CustomSubject
 from modules.process.app.pipelines.assign_cost_email import AssignCostEmail
@@ -64,18 +64,18 @@ class EmailProcessor(IDataProcessor):
         if not isinstance(lf, pl.LazyFrame):
             lf = lf.lazy()
 
-        col = payload.configFile.nameColumnIdentifier
-        lf = lf.with_columns(
-            pl.col(col).cast(pl.Utf8).str.strip_chars().str.to_lowercase().alias(Cols.identifier)
-            if col and col in lf.collect_schema()
-            else pl.lit("").alias(Cols.identifier)
-        )
+        # Adjunta el identificador de usuario antes de los pasos del pipeline
+        lf = attach_identifier(lf, payload)
 
         # Pre_steps (filter + rename): streaming añade overhead en planes simples;
         # se materializan con collect() estándar sobre datos ya en memoria.
         for step in self._pre_steps:
             lf = await step.execute(lf, payload)
         df = lf.collect()
+        logger.debug(
+            "Email pre-steps completados | registros tras limpieza y exclusión: %d",
+            df.height,
+        )
 
         # Transform chain: 6 with_columns puros sin filter ni rename →
         # collect(streaming) gana ~45% en 1M filas al procesar en chunks.
@@ -87,6 +87,10 @@ class EmailProcessor(IDataProcessor):
 
         summary = self._build_summary(df)
         sg = summary.summaryGeneral
+        logger.debug(
+            "Email pipeline finalizado | válidos: %d | excluidos: %d",
+            sg.total_records, sg.total_excluded,
+        )
         logger.info(
             "Email completado | válidos: %d | excluidos: %d | créditos: %g",
             sg.total_records, sg.total_excluded, sg.total_credits,

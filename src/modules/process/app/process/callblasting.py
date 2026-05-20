@@ -9,6 +9,7 @@ from modules.process.domain.models.process_dto import DataProcessingDTO
 from modules.process.domain.models.summary import CBCampaignSummary, CBSummaryGeneral, CBSummaryGroup
 from modules.process.domain.constants.cols import Cols
 from modules.process.domain.enums.sub_services import CallBlastingSubService
+from modules.process.app.helpers import attach_identifier
 from modules.process.app.normalizers.number import NumberNormalizer
 from modules.process.app.pipelines import (
     CleanData, Exclution, ValidatePhoneLength, AssignOperator, ConcatPrefix,
@@ -78,16 +79,24 @@ class CallBlastingProcessor(IDataProcessor):
         if steps is None:
             raise ValueError(f"Sub-servicio de call blasting no soportado: {payload.subService}")
 
-        df = lf.collect(engine="streaming") if isinstance(lf, pl.LazyFrame) else lf
+        # Adjuntamos el identificador y materializamos antes de los pasos del pipeline
+        df = attach_identifier(
+            lf if isinstance(lf, pl.LazyFrame) else lf.lazy(), payload
+        ).collect()
         logger.info(
             "CallBlasting [%s] iniciado | campaña: %s | registros: %d",
             payload.subService, payload.campaignId, df.height,
         )
+        logger.debug("CallBlasting pipeline | total registros entrada: %d", df.height)
         for step in steps:
             df = await step.execute(df, payload)
 
         summary = self._build_summary(df)
         sg = summary.summaryGeneral
+        logger.debug(
+            "CallBlasting pipeline finalizado | válidos: %d | excluidos: %d",
+            sg.total_records, sg.total_excluded,
+        )
         logger.info(
             "CallBlasting completado | válidos: %d | excluidos: %d | segundos: %d | créditos: %g",
             sg.total_records, sg.total_excluded, sg.total_seconds, sg.total_credits,

@@ -7,6 +7,7 @@ from modules.process.app.pipelines import (
     CleanData, ConcatPrefix, AssignOperator, AssignCost, CalculateCredits,
     CalculatePDU, CustomMessage, Exclution, Landing, SaveResults, ValidateRegulations,
 )
+from modules.process.app.helpers import attach_identifier
 from modules.process.app.normalizers.number import NumberNormalizer
 from modules.process.app.regulations.sms import SMS_REGULATIONS
 from modules.process.domain.interfaces.storage import IStorage
@@ -55,28 +56,36 @@ class SmsProcessor(IDataProcessor):
         ]
 
     async def process(self, lf: pl.LazyFrame | pl.DataFrame, payload: DataProcessingDTO) -> Dict[str, Any]:
-        df = lf.collect(engine="streaming") if isinstance(lf, pl.LazyFrame) else lf
+        # Adjuntamos el identificador antes de pasar por los pasos del pipeline
+        df = attach_identifier(
+            lf if isinstance(lf, pl.LazyFrame) else lf.lazy(), payload
+        ).collect(engine="streaming")
         logger.info(
             "SMS iniciado | campaña: %s | registros: %d",
             payload.campaignId, df.height,
         )
+        logger.debug("SMS pipeline | total registros entrada: %d", df.height)
         for step in self.steps:
             df = await step.execute(df, payload)
 
         summary = self._build_summary(df)
         sg = summary.summaryGeneral
+        logger.debug(
+            "SMS pipeline finalizado | válidos: %d | excluidos: %d",
+            sg.total_records, sg.total_excluded,
+        )
 
         if sg.total_records == 0:
+            # Todos los registros fueron excluidos — agrupamos por código para el desglose
             reasons = (
                 df.filter(pl.col(Cols.error_code).is_not_null())
                 .group_by(Cols.error_code)
                 .agg(pl.len().alias("affected"))
                 .to_dicts()
             )
-            logger.warning(
-                "SMS completado | válidos: 0 | excluidos: %d | campaña: %s | reasons: %s",
+            logger.error(
+                "SMS completado | válidos: 0 | excluidos: %d | campaña: %s",
                 sg.total_excluded, payload.campaignId,
-                [r[Cols.error_code] for r in reasons],
             )
             return {
                 "success": False,
