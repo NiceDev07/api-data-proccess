@@ -51,6 +51,7 @@ async def test_email_happy_path():
     df = pl.DataFrame({
         "email": ["user@gmail.com", "client@hotmail.com"],
         "code":  ["ABC1",           "XYZ2"],
+        Cols.identifier: ["", ""],
     })
     result = await processor.process(df, ctx)
     save_summary("email_flow/happy_path", result)
@@ -66,7 +67,7 @@ async def test_email_invalid_format_excluded():
     """Emails con formato inválido quedan fuera; resumen refleja exclusión."""
     processor, storage = make_processor("invalid_email")
     ctx = make_ctx(content="Hola", demographic="email", sub_service="standard", subject="Asunto de prueba")
-    df = pl.DataFrame({"email": ["invalid", "valid@gmail.com"]})
+    df = pl.DataFrame({"email": ["invalid", "valid@gmail.com"], Cols.identifier: ["", ""]})
     result = await processor.process(df, ctx)
     save_summary("email_flow/invalid_email", result)
 
@@ -91,7 +92,7 @@ async def test_email_exclusion_list():
         excl_config=excl_cfg,
         subject="Asunto de prueba",
     )
-    df = pl.DataFrame({"email": ["blocked@gmail.com", "free@hotmail.com"]})
+    df = pl.DataFrame({"email": ["blocked@gmail.com", "free@hotmail.com"], Cols.identifier: ["", ""]})
     result = await processor.process(df, ctx)
     save_summary("email_flow/exclusion", result)
 
@@ -108,7 +109,7 @@ async def test_email_summary_groups_by_domain():
     """Dos dominios distintos producen dos grupos en summaryGroup."""
     processor, storage = make_processor("domains", cost=0.02)
     ctx = make_ctx(content="Mensaje", demographic="email", sub_service="standard", subject="Asunto de prueba")
-    df = pl.DataFrame({"email": ["a@gmail.com", "b@hotmail.com"]})
+    df = pl.DataFrame({"email": ["a@gmail.com", "b@hotmail.com"], Cols.identifier: ["", ""]})
     result = await processor.process(df, ctx)
     save_summary("email_flow/domains", result)
 
@@ -122,7 +123,7 @@ async def test_email_unknown_domain_grouped_as_others():
     """Dominio desconocido se agrupa como 'others' en el resumen."""
     processor, storage = make_processor("unknown_domain")
     ctx = make_ctx(content="Mensaje", demographic="email", sub_service="standard", subject="Asunto de prueba")
-    df = pl.DataFrame({"email": ["user@empresa-privada.com"]})
+    df = pl.DataFrame({"email": ["user@empresa-privada.com"], Cols.identifier: [""]})
     result = await processor.process(df, ctx)
     save_summary("email_flow/unknown_domain", result)
 
@@ -134,7 +135,7 @@ async def test_email_parquet_contains_domain_column():
     """El archivo parquet guardado debe incluir __EMAIL_DOMAIN__."""
     processor, storage = make_processor("parquet_domain")
     ctx = make_ctx(content="Hola", demographic="email", sub_service="standard", subject="Asunto de prueba")
-    df = pl.DataFrame({"email": ["user@gmail.com"]})
+    df = pl.DataFrame({"email": ["user@gmail.com"], Cols.identifier: [""]})
     await processor.process(df, ctx)
 
     parquet_path = Path(storage.saved_paths[0])
@@ -147,7 +148,7 @@ async def test_email_parquet_audit_columns():
     """is_ok y error_code deben estar en el parquet guardado."""
     processor, storage = make_processor("parquet_audit")
     ctx = make_ctx(content="Hola", demographic="email", sub_service="standard", subject="Asunto de prueba")
-    df = pl.DataFrame({"email": ["user@gmail.com", "badformat"]})
+    df = pl.DataFrame({"email": ["user@gmail.com", "badformat"], Cols.identifier: ["", ""]})
     await processor.process(df, ctx)
 
     loaded = pl.read_parquet(storage.saved_paths[0])
@@ -163,7 +164,7 @@ async def test_email_all_excluded_returns_zero_credits():
     """Si todos los emails son inválidos, total_credits debe ser 0."""
     processor, storage = make_processor("all_excluded")
     ctx = make_ctx(content="Hola", demographic="email", sub_service="standard", subject="Asunto de prueba")
-    df = pl.DataFrame({"email": ["invalid1", "invalid2", "invalid3"]})
+    df = pl.DataFrame({"email": ["invalid1", "invalid2", "invalid3"], Cols.identifier: ["", "", ""]})
     result = await processor.process(df, ctx)
 
     sg = result["summaryGeneral"]
@@ -176,7 +177,7 @@ async def test_email_cost_catchall_applied_to_unknown_domain():
     """El costo plano se aplica a cualquier dominio."""
     processor, storage = make_processor("catchall", cost=0.01)
     ctx = make_ctx(content="Hola", demographic="email", sub_service="standard", subject="Asunto de prueba")
-    df = pl.DataFrame({"email": ["user@empresa.io"]})
+    df = pl.DataFrame({"email": ["user@empresa.io"], Cols.identifier: [""]})
     result = await processor.process(df, ctx)
 
     sg = result["summaryGeneral"]

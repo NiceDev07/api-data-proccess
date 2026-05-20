@@ -25,6 +25,7 @@ _SMS_COLS = [
     Cols.number_operator,
     Cols.pdu,
     Cols.credits,
+    Cols.identifier,
 ]
 
 _ERROR_DESCRIPTIONS: dict[str, str] = {

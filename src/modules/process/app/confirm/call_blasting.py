@@ -50,7 +50,12 @@ class CallBlastingConfirmStrategy(BaseConfirmStrategy):
         if rename_map:
             lf = lf.rename(rename_map)
 
-        lf = lf.with_columns(pl.lit("").alias("identification"))
+        if Cols.identifier in schema:
+            lf = lf.with_columns(
+                pl.col(Cols.identifier).fill_null("").alias("identification")
+            ).drop(Cols.identifier)
+        else:
+            lf = lf.with_columns(pl.lit("").alias("identification"))
 
         cols_to_drop = [c for c in _DROP_COLS if c in schema]
         if cols_to_drop:

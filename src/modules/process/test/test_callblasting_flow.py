@@ -52,7 +52,7 @@ def make_processor(
 
 def base_df(numbers: list[str] | None = None) -> pl.DataFrame:
     nums = numbers or _DEFAULT_NUMBERS
-    return pl.DataFrame({"number": nums})
+    return pl.DataFrame({"number": nums, Cols.identifier: [""] * len(nums)})
 
 
 def cb_ctx(**kwargs):
@@ -147,7 +147,7 @@ async def test_cb_custom_happy_path():
     """Dos registros con mensaje personalizado → segundos y créditos calculados."""
     processor, storage = make_processor("custom_happy_path")
     ctx = cb_ctx(content="Hola {nombre}, su pedido llegó.", sub_service="custom")
-    df = pl.DataFrame({"number": ["3005973563", "3208392650"], "nombre": ["Ana", "Luis"]})
+    df = pl.DataFrame({"number": ["3005973563", "3208392650"], "nombre": ["Ana", "Luis"], Cols.identifier: ["", ""]})
     result = await processor.process(df, ctx)
     save_summary("callblasting_flow/custom_happy_path", result)
 
@@ -162,7 +162,7 @@ async def test_cb_custom_parquet_has_message_column():
     """El parquet custom debe incluir la columna de mensaje."""
     processor, storage = make_processor("custom_parquet")
     ctx = cb_ctx(content="Hola {nombre}.", sub_service="custom")
-    df = pl.DataFrame({"number": ["3005973563", "3208392650"], "nombre": ["Pedro", "María"]})
+    df = pl.DataFrame({"number": ["3005973563", "3208392650"], "nombre": ["Pedro", "María"], Cols.identifier: ["", ""]})
     await processor.process(df, ctx)
 
     loaded = pl.read_parquet(storage.saved_paths[0])
@@ -180,6 +180,7 @@ async def test_cb_custom_per_record_seconds():
             "Hola",
             "Este es un mensaje mucho más largo con muchas más palabras para que dure más tiempo",
         ],
+        Cols.identifier: ["", ""],
     })
     await processor.process(df, ctx)
 
