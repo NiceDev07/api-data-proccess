@@ -5,7 +5,6 @@ class Cols:
     message: Final[str] = "__message__"
     number_operator: Final[str] = "__number_operator__"
     cost_operator: Final[str] = "__cost_operator__"
-    status: Final[str] = "__STATUS__"
     credits: Final[str] = "__CREDITS__"
     pdu: Final[str] = "__PDU__"               # SMS: Protocol Data Units
     seconds: Final[str] = "__SECONDS__"       # Call Blasting: duración del audio en segundos

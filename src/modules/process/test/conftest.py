@@ -25,9 +25,9 @@ from modules.process.domain.interfaces.storage import IStorage
 
 # ── forzar asyncio únicamente ─────────────────────────────────────────────────
 
-@pytest.fixture(params=["asyncio"])
-def anyio_backend(request):
-    return request.param
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
 
 
 # ── rutas ─────────────────────────────────────────────────────────────────────

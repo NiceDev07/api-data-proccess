@@ -4,10 +4,6 @@ import polars as pl
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine
 
-from logging_config import get_logger
-
-logger = get_logger(__name__)
-
 _CHUNK_ASYNC     = 10_000
 _MAX_CONCURRENCY = 8
 

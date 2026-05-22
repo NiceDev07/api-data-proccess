@@ -8,12 +8,7 @@ _EMAIL_RE = r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$"
 
 
 class ValidateEmail(IPipeline):
-    """Marca como is_ok=False los registros con formato de email inválido.
-
-    Solo afecta registros que aún están activos (is_ok=True) para no
-    sobreescribir exclusiones anteriores.
-    """
-
+    # Invalida registros con formato de email incorrecto; respeta exclusiones anteriores
     async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
         is_valid = pl.col(Cols.email).str.contains(_EMAIL_RE)
         to_invalidate = pl.col(Cols.is_ok) & ~is_valid

@@ -45,7 +45,7 @@ class PreviewRequest(BaseModel):
 )
 async def first_rows(payload: PreviewRequest):
     try:
-        result = await get_first_rows(payload.folder, payload.file, settings.REPOSITORY_FILES_DIR)
+        result = await get_first_rows(payload.folder, payload.file, settings.repository_files_dir)
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
     except FileNotFoundError as e:

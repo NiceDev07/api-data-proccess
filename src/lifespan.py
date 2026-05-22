@@ -8,6 +8,7 @@ import redis.asyncio as redis
 
 from config.settings import settings  # type: ignore
 from logging_config import setup_logging, get_logger
+from modules.process.infrastructure.startup.deps import build_process_shared_deps
 
 setup_logging()
 logger = get_logger(__name__)
@@ -42,20 +43,20 @@ async def lifespan(app: FastAPI):
     # ── Startup ───────────────────────────────────────────────────────────────
     logger.info("Inicializando pools async de MySQL...")
     engines = {
-        "saem3": create_async_engine(settings.DB_SAEM3, **_ASYNC_ENGINE_ARGS),
-        "portabilidad": create_async_engine(settings.DB_PORTABILIDAD, **_ASYNC_ENGINE_ARGS),
+        "saem3": create_async_engine(settings.db_saem3, **_ASYNC_ENGINE_ARGS),
+        "portabilidad": create_async_engine(settings.db_portabilidad, **_ASYNC_ENGINE_ARGS),
         "masivos_sms": create_async_engine(
-            settings.DB_MASIVOS_SMS,
+            settings.db_masivos_sms,
             connect_args={"charset": "utf8mb4"},
             **_ASYNC_ENGINE_ARGS,
         ),
         "telefonos_campanas": create_async_engine(
-            settings.DB_TELEFONOS_CAMPANAS,
+            settings.db_telefonos_campanas,
             connect_args={"charset": "utf8mb4"},
             **_ASYNC_ENGINE_ARGS,
         ),
         "email": create_async_engine(
-            settings.DB_EMAIL,
+            settings.db_email,
             connect_args={"charset": "utf8mb4"},
             **_ASYNC_ENGINE_ARGS,
         ),
@@ -63,14 +64,14 @@ async def lifespan(app: FastAPI):
 
     logger.info("Inicializando pool async de PostgreSQL (call blasting)...")
     pg_engines = {
-        "callb": create_async_engine(settings.DB_CALLB, **_ASYNC_ENGINE_ARGS),
+        "callb": create_async_engine(settings.db_callb, **_ASYNC_ENGINE_ARGS),
     }
 
     # Engine síncrono solo para campanas (pymysql + local_infile).
     logger.info("Inicializando pools sync de MySQL...")
     sync_engines = {
         "telefonos_campanas": create_engine(
-            _sync_dsn(settings.DB_TELEFONOS_CAMPANAS),
+            _sync_dsn(settings.db_telefonos_campanas),
             connect_args={"local_infile": True, "charset": "utf8mb4"},
             **_SYNC_ENGINE_ARGS,
         ),
@@ -78,7 +79,7 @@ async def lifespan(app: FastAPI):
 
     logger.info("Inicializando pool de Redis...")
     redis_client = redis.from_url(
-        settings.REDIS_URL,
+        settings.redis_url,
         encoding="utf-8",
         decode_responses=True,
         max_connections=50,
@@ -108,10 +109,9 @@ async def lifespan(app: FastAPI):
                 logger.exception("Error cerrando sync engine %s tras fallo en startup", name)
         raise
 
-    from modules.process.infrastructure.deps import build_process_shared_deps
     process_deps = build_process_shared_deps(
         redis_client,
-        max_records_elevated=settings.MAX_CAMPAIGN_RECORDS,
+        max_records_elevated=settings.max_campaign_records,
     )
 
     session_factories = {

@@ -7,8 +7,6 @@ from modules.process.app.services.cost import CostService
 
 
 class AssignCostCallBlasting(IPipeline):
-    """Asigna cost, cost_operator, initial e incremental para call blasting."""
-
     default_cost = 0.0
 
     def __init__(self, cost_service: CostService):

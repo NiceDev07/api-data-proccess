@@ -383,8 +383,9 @@ class TestAssignOperator:
         )
         svc = await self._mock_service([3000000000], [3099999999], ["CLARO"])
         result = await AssignOperator(svc).execute(df, make_ctx(demographic="phone"))
+        # El error_code original se preserva — AssignOperator no sobreescribe exclusiones previas.
         assert result[Cols.is_ok][0] is False
-        assert result[Cols.error_code][0] == ExclusionReason.NO_OPERATOR
+        assert result[Cols.error_code][0] == ExclusionReason.EXCLUSION_LIST
 
 
 # ─────────────────────────────────────────────────────────────────────────────

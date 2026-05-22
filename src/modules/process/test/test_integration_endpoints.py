@@ -493,9 +493,9 @@ async def test_confirm_sms_real_db():
         }
     )
 
-    sync_dsn = re.sub(r"^mysql\+\w+://", "mysql+pymysql://", settings.DB_TELEFONOS_CAMPANAS)
+    sync_dsn = re.sub(r"^mysql\+\w+://", "mysql+pymysql://", settings.db_telefonos_campanas)
     sync_engine = create_engine(sync_dsn, pool_pre_ping=True, connect_args={"local_infile": True, "charset": "utf8mb4"})
-    async_engine = create_async_engine(settings.DB_TELEFONOS_CAMPANAS, pool_pre_ping=True)
+    async_engine = create_async_engine(settings.db_telefonos_campanas, pool_pre_ping=True)
     AsyncSessionLocal = sessionmaker(async_engine, class_=AsyncSession, expire_on_commit=False)
 
     try:
@@ -512,7 +512,7 @@ async def test_confirm_sms_real_db():
 
     _record("/confirm (real DB)", "sms", N_ROWS, elapsed)
 
-    db_host = settings.DB_TELEFONOS_CAMPANAS.split("@")[-1].split("/")[0] if "@" in settings.DB_TELEFONOS_CAMPANAS else "configured host"
+    db_host = settings.db_telefonos_campanas.split("@")[-1].split("/")[0] if "@" in settings.db_telefonos_campanas else "configured host"
 
     print(f"\n")
     print(f"  ┌─ INSERCIÓN REAL EN BASE DE DATOS — SMS ───────────────────────┐")
@@ -563,7 +563,7 @@ async def test_confirm_email_real_db(tmp_path: Path):
     _make_email_parquet(parquet_path, N_ROWS)
 
     # 2. Sync engine real (mismo driver que el lifespan)
-    sync_dsn = re.sub(r"^mysql\+\w+://", "mysql+pymysql://", settings.DB_EMAIL)
+    sync_dsn = re.sub(r"^mysql\+\w+://", "mysql+pymysql://", settings.db_email)
     sync_engine = create_engine(
         sync_dsn,
         pool_size=3,
@@ -591,7 +591,7 @@ async def test_confirm_email_real_db(tmp_path: Path):
     app.include_router(process_router, prefix="/v2")
     app.dependency_overrides[get_confirm_factory] = _real_confirm_factory
 
-    db_host = settings.DB_EMAIL.split("@")[-1].split("/")[0] if "@" in settings.DB_EMAIL else "configured host"
+    db_host = settings.db_email.split("@")[-1].split("/")[0] if "@" in settings.db_email else "configured host"
 
     try:
         t0 = time.perf_counter()

@@ -1,5 +1,4 @@
 import asyncio
-import os
 
 import polars as pl
 
@@ -9,16 +8,15 @@ from modules.process.domain.utils import normalize_col_name
 
 
 class CsvReader(IFileReader):
-    async def read(self, config: BaseFileConfig) -> pl.DataFrame:
+    async def read(self, config: BaseFileConfig) -> pl.LazyFrame:
         if config is None:
             raise ValueError("CsvReader.read() recibió config=None")
 
-        file_path = os.path.join(config.folder)
+        file_path = config.folder
 
         def _load() -> pl.LazyFrame:
-            # read_csv carga el archivo una sola vez en memoria; .lazy() envuelve
-            # el DataFrame para que toda la cadena de pasos corra como plan lazy
-            # y se materialice una única vez en SaveResults.collect(streaming).
+            # read_csv + .lazy(): carga el archivo una vez y envuelve en plan lazy
+            # para que toda la cadena de pasos se materialice una sola vez al final.
             kwargs = dict(
                 separator=config.delimiter,
                 encoding="utf8-lossy",
@@ -36,10 +34,12 @@ class CsvReader(IFileReader):
 
         try:
             lf = await asyncio.to_thread(_load)
-            return lf.rename({c: normalize_col_name(c) for c in lf.collect_schema()})
+            lf = lf.rename({c: normalize_col_name(c) for c in lf.collect_schema()})
+            # Elimina filas donde todas las columnas son nulas (líneas en blanco del CSV)
+            return lf.filter(pl.any_horizontal(pl.all().is_not_null()))
         except FileNotFoundError:
             raise FileNotFoundError("FILE_NOT_FOUND: Campaign file not found.")
         except UnicodeDecodeError:
             raise ValueError("FILE_READ_ERROR: Encoding error while reading the campaign file.")
-        except Exception as e:
+        except Exception:
             raise ValueError("FILE_READ_ERROR: Error reading the campaign file.")

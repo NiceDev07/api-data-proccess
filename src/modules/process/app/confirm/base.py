@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
-from modules.process.infrastructure.storage.local import LocalStorage
+from modules.process.domain.interfaces.storage import IStorage
 from logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -16,7 +16,7 @@ class BaseConfirmStrategy(ABC):
     @abstractmethod
     async def _do_confirm(self, path: Path, campaign_ids: list[int]) -> dict[str, Any]: ...
 
-    def __init__(self, storage: LocalStorage):
+    def __init__(self, storage: IStorage):
         self._storage = storage
 
     def _build_path(self, key: str) -> Path:
@@ -40,5 +40,6 @@ class BaseConfirmStrategy(ABC):
         try:
             path.unlink(missing_ok=True)
         except Exception:
-            logger.warning("Confirm [%s] | no se pudo eliminar | path=%s", self._service_name, path)
+            # El archivo ya fue procesado; si no se puede borrar no es crítico
+            logger.warning("Confirm [%s] | no se pudo eliminar parquet | path=%s", self._service_name, path)
         return result

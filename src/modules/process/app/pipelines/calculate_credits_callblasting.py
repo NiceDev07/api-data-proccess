@@ -5,14 +5,10 @@ from modules.process.domain.constants.cols import Cols
 
 
 class CalculateCreditsCallBlasting(IPipeline):
-    """Calcula créditos para call blasting.
-
-    Fórmula:
-        si seconds > initial → cycles = ⌈seconds / incremental⌉
-        si no               → cycles = initial   (mínimo de facturación)
-        cost_per_second = cost / 60  (cost viene por minuto desde DB)
-        credits = cycles × incremental × cost_per_second
-    """
+    # Fórmula de facturación call blasting:
+    #   cycles = ⌈seconds / incremental⌉  si seconds > initial, si no cycles = initial
+    #   cost_per_second = cost / 60  (cost viene por minuto desde BD)
+    #   credits = cycles × incremental × cost_per_second
 
     async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
         cycles = (

@@ -10,15 +10,8 @@ from modules.process.domain.constants.callblasting import OPERATION_MARGIN_SECS
 
 
 class CalculateDurationStandard(IPipeline):
-    """Sets PDU = ceil(audioDuration) for all records.
-
-    Resolución de duración (en orden de prioridad):
-      1. ctx.audioDuration — valor ya calculado, se usa directamente.
-      2. ctx.audioPath    — ruta local o URL; se delega al provider inyectado.
-
-    Raises:
-        ValueError: Si ninguno de los dos campos está presente.
-    """
+    # Asigna la duración del audio (en segundos) a todos los registros.
+    # Prioridad: audioDuration (ya calculada) > audioPath (se delega al provider).
 
     def __init__(self, duration_provider: IAudioDurationProvider):
         self._provider = duration_provider

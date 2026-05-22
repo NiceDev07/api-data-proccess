@@ -29,7 +29,7 @@ from modules.process.infrastructure.routes.preview import router as preview_rout
 def _make_app(base_dir: str) -> FastAPI:
     # Sobreescribe REPOSITORY_FILES_DIR con el directorio temporal del test
     import config.settings as _s
-    _s.settings.REPOSITORY_FILES_DIR = base_dir
+    _s.settings.repository_files_dir = base_dir
     app = FastAPI()
     app.include_router(preview_router, prefix="/v2")
     return app

@@ -6,13 +6,8 @@ from modules.process.domain.constants.reasons import ExclusionReason
 
 
 class ValidatePhoneLength(IPipeline):
-    """Marca como is_ok=False los registros cuyo número no tenga exactamente
-    numberDigitsMobile o numberDigitsFixed dígitos.
-
-    Solo afecta registros que aún están activos (is_ok=True) para no
-    sobreescribir exclusiones anteriores.
-    """
-
+    # Invalida números que no tengan exactamente numberDigitsMobile o numberDigitsFixed dígitos;
+    # respeta exclusiones anteriores (solo toca registros con is_ok=True)
     async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
         c = ctx.configFile.nameColumnDemographic
         rules = ctx.rulesCountry
@@ -22,7 +17,6 @@ class ValidatePhoneLength(IPipeline):
             (digit_count == rules.numberDigitsMobile) |
             (digit_count == rules.numberDigitsFixed)
         )
-        # Solo invalida registros que estaban ok; respeta exclusiones previas
         to_invalidate = pl.col(Cols.is_ok) & ~is_valid_length
 
         return df.with_columns(

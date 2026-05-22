@@ -4,8 +4,6 @@ from modules.process.domain.enums.sub_services import SmsSubService, CallBlastin
 from modules.process.domain.utils import normalize_col_name
 
 
-
-
 class RulesCountry(BaseModel):
     idCountry: int = Field(..., description="ID del país en la base de numeración.", examples=[81])
     codeCountry: int = Field(..., description="Código telefónico del país (sin +).", examples=[57])

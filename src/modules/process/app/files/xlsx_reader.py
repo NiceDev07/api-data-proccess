@@ -1,5 +1,4 @@
 import asyncio
-import os
 
 import polars as pl
 
@@ -13,7 +12,7 @@ class XlsxReader(IFileReader):
         if config is None:
             raise ValueError("XlsxReader.read() recibió config=None")
 
-        file_path = os.path.join(config.folder)
+        file_path = config.folder
 
         def _load() -> pl.LazyFrame:
             return pl.read_excel(
@@ -23,8 +22,10 @@ class XlsxReader(IFileReader):
 
         try:
             lf = await asyncio.to_thread(_load)
-            return lf.rename({c: normalize_col_name(c) for c in lf.collect_schema()})
+            lf = lf.rename({c: normalize_col_name(c) for c in lf.collect_schema()})
+            # Elimina filas donde todas las columnas son nulas (filas vacías de Excel)
+            return lf.filter(pl.any_horizontal(pl.all().is_not_null()))
         except FileNotFoundError:
             raise FileNotFoundError("FILE_NOT_FOUND: Campaign file not found.")
-        except Exception as e:
+        except Exception:
             raise ValueError("FILE_READ_ERROR: Error reading the campaign file.")
