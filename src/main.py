@@ -3,6 +3,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 # from modules.data_processing.infrastructure.routes.preload_camp import router as preload_router
 from modules.process.infrastructure.routes.process import router as process_router
+from modules.process.infrastructure.routes.preview import router as preview_router
 from config.settings import settings
 from lifespan import lifespan
 
@@ -48,6 +49,10 @@ def create_app() -> FastAPI:
                 "name": "Health",
                 "description": "Verifica que el servicio esté corriendo.",
             },
+            {
+                "name": "Files",
+                "description": "Utilidades para inspeccionar archivos antes de procesarlos.",
+            },
         ],
     )
     @app.exception_handler(RequestValidationError)
@@ -56,10 +61,11 @@ def create_app() -> FastAPI:
         loc = error.get("loc", ())
         if loc and loc[0] == "path":
             return JSONResponse(status_code=400, content={"detail": error["msg"]})
-        return JSONResponse(status_code=422, content={"detail": exc.errors()})
+        return JSONResponse(status_code=422, content={"detail": error["msg"]})
 
     # app.include_router(preload_router, prefix=settings.PREFIX_APP, tags=["Data Processing Service"])
     app.include_router(process_router, prefix=settings.PREFIX_APP)
+    app.include_router(preview_router, prefix=settings.PREFIX_APP)
     return app
 
 app = create_app()
