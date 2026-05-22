@@ -68,14 +68,11 @@ def _read_csv(file_path: str) -> list[str]:
 
     content = "".join(lines)
 
-    df = (
-        pl.read_csv(
-            io.BytesIO(content.encode("utf-8")),
-            n_rows=_MAX_ROWS,
-            has_header=False,
-            separator=sep,
-            infer_schema=False,
-        )
+    df = pl.read_csv(
+        io.BytesIO(content.encode("utf-8")),
+        has_header=False,
+        separator=sep,
+        infer_schema=False,
     )
     df = df.select(df.columns[:_MAX_COLS]).fill_null("")
     return [sep.join(map(str, row)) for row in df.rows()]

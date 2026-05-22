@@ -32,7 +32,7 @@ THRESHOLD    = 50_000        # Must match EmailConfirmRepository._LOAD_DATA_THRE
 INSERT_CHUNK = 5_000
 ROW_COUNTS   = [100, 1_000, 10_000, 50_000, 100_000, 500_000, 1_000_000]
 
-SYNC_DSN = re.sub(r"^mysql\+\w+://", "mysql+pymysql://", settings.DB_EMAIL)
+SYNC_DSN = re.sub(r"^mysql\+\w+://", "mysql+pymysql://", settings.db_email)
 
 # ------------------------------------------------------------------
 # Helpers

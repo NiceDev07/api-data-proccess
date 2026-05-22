@@ -23,7 +23,7 @@ THRESHOLD     = 50_000          # Must match repository _LOAD_DATA_THRESHOLD
 INSERT_CHUNK  = 5_000
 ROW_COUNTS    = [100, 1_000, 10_000, 50_000, 100_000, 500_000, 1_000_000]
 
-SYNC_DSN = re.sub(r"^mysql\+\w+://", "mysql+pymysql://", settings.DB_TELEFONOS_CAMPANAS)
+SYNC_DSN = re.sub(r"^mysql\+\w+://", "mysql+pymysql://", settings.db_telefonos_campanas)
 
 # ------------------------------------------------------------------
 # Helpers
