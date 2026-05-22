@@ -65,16 +65,8 @@ def make_payload(**overrides) -> DataProcessingDTO:
 
 
 async def read_df(payload: DataProcessingDTO) -> pl.DataFrame:
-    df = await CsvReader().read(payload.configFile)
-    if payload.configFile.userIdentifier and payload.configFile.nameColumnIdentifier:
-        df = df.with_columns(
-            pl.col(payload.configFile.nameColumnIdentifier)
-            .cast(pl.Utf8)
-            .alias(Cols.identifier)
-        )
-    else:
-        df = df.with_columns(pl.lit(None).cast(pl.Utf8).alias(Cols.identifier))
-    return df
+    # Solo lee el archivo; el processor adjunta Cols.identifier internamente
+    return await CsvReader().read(payload.configFile)
 
 
 # ---------------------------------------------------------------------------
