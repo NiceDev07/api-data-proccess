@@ -87,10 +87,6 @@ class EmailProcessor(IDataProcessor):
 
         summary = self._build_summary(df)
         sg = summary.summaryGeneral
-        logger.debug(
-            "Email pipeline finalizado | válidos: %d | excluidos: %d",
-            sg.total_records, sg.total_excluded,
-        )
         logger.info(
             "Email completado | válidos: %d | excluidos: %d | créditos: %g",
             sg.total_records, sg.total_excluded, sg.total_credits,
