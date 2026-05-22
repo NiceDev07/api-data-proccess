@@ -12,8 +12,7 @@ class Settings(BaseSettings):
     port:       int       = Field(8000,         alias="PORT")
     host:       str       = Field("0.0.0.0",    alias="HOST")
 
-    repository_files_dir: str = Field("/",           alias="REPOSITORY_FILES_DIR")
-    output_dir:           str = Field("resultados",  alias="OUTPUT_DIR")
+    repository_files_dir: str = Field("/", alias="REPOSITORY_FILES_DIR")
 
     db_saem3:             str = Field(..., alias="DB_SAEM3")
     db_portabilidad:      str = Field(..., alias="DB_PORTABILIDAD")

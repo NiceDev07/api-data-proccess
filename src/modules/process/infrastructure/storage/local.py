@@ -6,7 +6,7 @@ from config.settings import settings
 
 
 class LocalStorage(IStorage):
-    def __init__(self, base_dir: str = settings.output_dir):
+    def __init__(self, base_dir: str = settings.repository_files_dir):
         self.base_dir = Path(base_dir)
 
     async def save(self, df: pl.DataFrame, filename: str) -> str:
