@@ -14,27 +14,27 @@ import pytest
 
 from modules.process.app.normalizers.email import EmailNormalizer
 from modules.process.app.normalizers.number import NumberNormalizer
-from modules.process.app.pipelines.assign_cost import AssignCost
-from modules.process.app.pipelines.assign_cost_callblasting import AssignCostCallBlasting
-from modules.process.app.pipelines.assign_cost_email import AssignCostEmail
-from modules.process.app.pipelines.assign_operator import AssignOperator
-from modules.process.app.pipelines.calculate_credits import CalculateCredits
-from modules.process.app.pipelines.calculate_credits_callblasting import CalculateCreditsCallBlasting
-from modules.process.app.pipelines.calculate_credits_email import CalculateCreditsEmail
-from modules.process.app.pipelines.calculate_duration_custom import CalculateDurationCustom
-from modules.process.app.pipelines.calculate_duration_standard import CalculateDurationStandard
-from modules.process.app.pipelines.calculate_pdu import CalculatePDU
-from modules.process.app.pipelines.clean_data import CleanData
-from modules.process.app.pipelines.clean_data_email import CleanDataEmail
-from modules.process.app.pipelines.concat_prefix import ConcatPrefix
-from modules.process.app.pipelines.custom_message import CustomMessage
-from modules.process.app.pipelines.exclution import Exclution
-from modules.process.app.pipelines.exclution_email import ExclutionEmail
-from modules.process.app.pipelines.extract_email_domain import ExtractEmailDomain
-from modules.process.app.pipelines.landing import Landing
-from modules.process.app.pipelines.validate_email import ValidateEmail
-from modules.process.app.pipelines.validate_phone_length import ValidatePhoneLength
-from modules.process.app.pipelines.validate_regulations import ValidateRegulations
+from modules.process.app.pipelines.sms.assign_cost import AssignCost
+from modules.process.app.pipelines.callblasting.assign_cost import AssignCostCallBlasting
+from modules.process.app.pipelines.email.assign_cost import AssignCostEmail
+from modules.process.app.pipelines.sms.assign_operator import AssignOperator
+from modules.process.app.pipelines.sms.calculate_credits import CalculateCredits
+from modules.process.app.pipelines.callblasting.calculate_credits import CalculateCreditsCallBlasting
+from modules.process.app.pipelines.email.calculate_credits import CalculateCreditsEmail
+from modules.process.app.pipelines.callblasting.calculate_duration_custom import CalculateDurationCustom
+from modules.process.app.pipelines.callblasting.calculate_duration_standard import CalculateDurationStandard
+from modules.process.app.pipelines.sms.calculate_pdu import CalculatePDU
+from modules.process.app.pipelines.sms.clean_data import CleanData
+from modules.process.app.pipelines.email.clean_data import CleanDataEmail
+from modules.process.app.pipelines.sms.concat_prefix import ConcatPrefix
+from modules.process.app.pipelines.sms.custom_message import CustomMessage
+from modules.process.app.pipelines.sms.exclution import Exclution
+from modules.process.app.pipelines.email.exclution import ExclutionEmail
+from modules.process.app.pipelines.email.extract_email_domain import ExtractEmailDomain
+from modules.process.app.pipelines.sms.landing import Landing
+from modules.process.app.pipelines.email.validate_email import ValidateEmail
+from modules.process.app.pipelines.sms.validate_phone_length import ValidatePhoneLength
+from modules.process.app.pipelines.sms.validate_regulations import ValidateRegulations
 from modules.process.app.regulations.sms import (
     CharLimitRegulation,
     ShortNameRegulation,
@@ -45,7 +45,7 @@ from modules.process.domain.constants.cols import Cols
 from modules.process.domain.constants.reasons import ExclusionReason
 from modules.process.domain.models.process_dto import ConfigListExclusion, RulesCountry
 
-from .conftest import (
+from modules.process.test.conftest import (
     BASE_RULES_CHILE,
     BASE_RULES_SMS,
     base_email_df,
@@ -857,14 +857,14 @@ class TestCalculateCreditsEmail:
 
 class TestCustomSubject:
     async def test_missing_subject_raises_with_code(self):
-        from modules.process.app.pipelines.custom_subject import CustomSubject
+        from modules.process.app.pipelines.email.custom_subject import CustomSubject
         df = pl.DataFrame({Cols.email: ["a@b.com"]})
         ctx = make_ctx(subject=None)
         with pytest.raises(ValueError, match="SUBJECT_REQUIRED"):
             await CustomSubject().execute(df, ctx)
 
     async def test_subject_present_adds_column(self):
-        from modules.process.app.pipelines.custom_subject import CustomSubject
+        from modules.process.app.pipelines.email.custom_subject import CustomSubject
         df = pl.DataFrame({Cols.email: ["a@b.com"]})
         ctx = make_ctx(subject="Hola")
         result = await CustomSubject().execute(df, ctx)

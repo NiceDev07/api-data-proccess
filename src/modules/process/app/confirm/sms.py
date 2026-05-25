@@ -5,7 +5,7 @@ from typing import Any
 import polars as pl
 
 from modules.process.domain.constants.cols import Cols
-from modules.process.infrastructure.repositories.sms_confirm import SmsConfirmRepository
+from modules.process.infrastructure.repositories.confirm.sms import SmsConfirmRepository
 from modules.process.infrastructure.storage.local import LocalStorage
 from modules.process.app.confirm.base import BaseConfirmStrategy
 

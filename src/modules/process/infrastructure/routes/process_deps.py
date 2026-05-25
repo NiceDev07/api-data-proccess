@@ -35,11 +35,11 @@ from modules.process.domain.models.process_dto import (
     SmsDataProcessingDTO,
 )
 from modules.process.infrastructure.startup.deps import ProcessSharedDeps
-from modules.process.infrastructure.repositories.callblasting_confirm import CallBlastingConfirmRepository
+from modules.process.infrastructure.repositories.confirm.callblasting import CallBlastingConfirmRepository
 from modules.process.infrastructure.repositories.cost import CostRepository
-from modules.process.infrastructure.repositories.email_confirm import EmailConfirmRepository
+from modules.process.infrastructure.repositories.confirm.email import EmailConfirmRepository
 from modules.process.infrastructure.repositories.numeration import NumeracionRepository
-from modules.process.infrastructure.repositories.sms_confirm import SmsConfirmRepository
+from modules.process.infrastructure.repositories.confirm.sms import SmsConfirmRepository
 
 
 # ── dependencias compartidas ───────────────────────────────────────────────────

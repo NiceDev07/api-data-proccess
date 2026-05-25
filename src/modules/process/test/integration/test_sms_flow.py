@@ -23,7 +23,7 @@ from modules.process.domain.models.process_dto import (
     SmsDataProcessingDTO,
 )
 
-from .conftest import (
+from modules.process.test.conftest import (
     AnalysisStorage,
     BASE_RULES_SMS,
     cost_mock,
@@ -32,7 +32,7 @@ from .conftest import (
     save_summary,
 )
 
-PROJECT_ROOT = Path(__file__).parents[4]
+PROJECT_ROOT = Path(__file__).parents[5]
 DATA_FILE = PROJECT_ROOT / "files" / "data.csv"
 
 BASE_CONFIG_FILE = ConfigFile(

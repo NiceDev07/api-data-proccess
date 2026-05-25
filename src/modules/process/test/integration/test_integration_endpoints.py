@@ -474,7 +474,7 @@ async def test_confirm_sms_real_db():
     from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
     from sqlalchemy.orm import sessionmaker
     from config.settings import settings
-    from modules.process.infrastructure.repositories.sms_confirm import SmsConfirmRepository
+    from modules.process.infrastructure.repositories.confirm.sms import SmsConfirmRepository
 
     CAMPAIGN_ID = 99999191
     N_ROWS = 1_000_000
@@ -547,7 +547,7 @@ async def test_confirm_email_real_db(tmp_path: Path):
     from fastapi import FastAPI
     from httpx import AsyncClient, ASGITransport
     from config.settings import settings
-    from modules.process.infrastructure.repositories.email_confirm import EmailConfirmRepository
+    from modules.process.infrastructure.repositories.confirm.email import EmailConfirmRepository
     from modules.process.app.confirm.email import EmailConfirmStrategy
     from modules.process.app.confirm.call_blasting import CallBlastingConfirmStrategy
     from modules.process.app.confirm.factory import ConfirmFactory

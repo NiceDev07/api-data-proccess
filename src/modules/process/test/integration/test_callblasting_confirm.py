@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 import polars as pl
 import pytest
 
-from modules.process.infrastructure.repositories.callblasting_confirm import CallBlastingConfirmRepository
+from modules.process.infrastructure.repositories.confirm.callblasting import CallBlastingConfirmRepository
 
 pytestmark = pytest.mark.anyio
 

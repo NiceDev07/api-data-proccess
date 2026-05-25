@@ -13,7 +13,7 @@ from modules.process.app.process.email import EmailProcessor
 from modules.process.domain.constants.cols import Cols
 from modules.process.domain.constants.reasons import ExclusionReason
 
-from .conftest import (
+from modules.process.test.conftest import (
     AnalysisStorage,
     base_email_df,
     email_cost_mock,

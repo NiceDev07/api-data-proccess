@@ -13,7 +13,7 @@ from modules.process.app.process.callblasting import CallBlastingProcessor
 from modules.process.domain.constants.cols import Cols
 from modules.process.domain.constants.reasons import ExclusionReason
 
-from .conftest import (
+from modules.process.test.conftest import (
     AnalysisStorage,
     cb_cost_mock,
     duration_mock,

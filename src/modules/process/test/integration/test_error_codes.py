@@ -12,7 +12,7 @@ from modules.process.domain.constants.cols import Cols
 from modules.process.domain.models.process_dto import DataProcessingDTO, InfoUserValidSend
 from modules.process.infrastructure.validators.level_validator import LevelValidator
 
-from .conftest import BASE_RULES_SMS, make_config_file, make_ctx
+from modules.process.test.conftest import BASE_RULES_SMS, make_config_file, make_ctx
 
 pytestmark = pytest.mark.anyio
 

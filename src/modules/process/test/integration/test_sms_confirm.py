@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 import polars as pl
 import pytest
 
-from modules.process.infrastructure.repositories.sms_confirm import SmsConfirmRepository
+from modules.process.infrastructure.repositories.confirm.sms import SmsConfirmRepository
 
 pytestmark = pytest.mark.anyio
 

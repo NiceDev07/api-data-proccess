@@ -3,7 +3,7 @@ import polars as pl
 from modules.process.domain.interfaces.pipeline import IPipeline
 from modules.process.domain.models.process_dto import DataProcessingDTO
 from modules.process.domain.constants.cols import Cols
-from modules.process.app.pipelines._template import build_template_expr
+from modules.process.app.pipelines.shared._template import build_template_expr
 
 
 class CustomSubject(IPipeline):

@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, call
 import polars as pl
 import pytest
 
-from modules.process.infrastructure.repositories.email_confirm import EmailConfirmRepository
+from modules.process.infrastructure.repositories.confirm.email import EmailConfirmRepository
 
 pytestmark = pytest.mark.anyio
 
