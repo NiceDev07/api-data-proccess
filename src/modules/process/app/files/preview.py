@@ -78,10 +78,13 @@ def _read_csv(file_path: str) -> list[str]:
     return [sep.join(map(str, row)) for row in df.rows()]
 
 
+_DEFAULT_SEP = ";"
+
+
 def _read_xlsx(file_path: str) -> list[str]:
     df = pl.read_excel(file_path, read_options={"n_rows": _MAX_ROWS})
     df = df.select(df.columns[:_MAX_COLS]).fill_null("")
-    return [",".join(map(str, row)) for row in df.rows()]
+    return [_DEFAULT_SEP.join(map(str, row)) for row in df.rows()]
 
 
 async def get_first_rows(folder: str, file: str, base_dir: str) -> dict:

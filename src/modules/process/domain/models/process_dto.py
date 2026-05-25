@@ -18,7 +18,7 @@ class RulesCountry(BaseModel):
 class BaseFileConfig(BaseModel):
     folder: str = Field(..., description="Ruta absoluta al directorio que contiene el archivo.")
     file: str = Field(..., description="Nombre del archivo con extensión (CSV o XLSX).")
-    delimiter: str = Field(..., description="Delimitador de columnas para CSV. Dejar vacío para XLSX.")
+    delimiter: str = Field(..., description="Delimitador de columnas para CSV. Para XLSX enviar vacío — el campo no se usa en la lectura.")
     useHeaders: bool = Field(..., description="Si `true`, la primera fila se usa como encabezado.")
     nameColumnDemographic: str = Field(..., description="Nombre de la columna que contiene el número/email.")
 
