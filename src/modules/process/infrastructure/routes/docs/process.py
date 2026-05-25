@@ -238,9 +238,10 @@ CONFIRM_RESPONSES = {
 # ── first-rows ─────────────────────────────────────────────────────────────────
 
 PREVIEW_DESCRIPTION = (
-    "Lee las primeras 6 filas de un archivo CSV o XLSX y las retorna como lista de strings.\n\n"
-    "Detecta automáticamente el encoding (`utf_8_sig`, `cp1252`, `latin1`) y el delimitador (`,` o `;`).\n\n"
-    "El body debe contener exactamente los campos `folder` y `file`."
+    "Lee las primeras 6 filas de un archivo CSV o XLSX y las retorna como `headers` + `rows`.\n\n"
+    "El delimitador se pasa explícitamente en el body (`delimiter`); si se omite se usa `;` por defecto.\n\n"
+    "Soporta `useHeaders` para indicar si la primera fila es encabezado (por defecto `true`).\n\n"
+    "El body debe contener al menos `folder` y `file`. Los campos `delimiter` y `useHeaders` son opcionales."
 )
 
 PREVIEW_RESPONSES = {

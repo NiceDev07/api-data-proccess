@@ -18,6 +18,10 @@ _ALLOWED_EXTENSIONS = ("csv", "xlsx")
 class PreviewRequest(BaseModel):
     folder: str
     file: str
+    # delimiter es opcional: si viene vacío o no se envía, el sistema usa ";" por defecto
+    delimiter: str = ""
+    # useHeaders indica si la primera fila del archivo es encabezado
+    useHeaders: bool = True
 
     @field_validator("folder", "file")
     @classmethod
@@ -45,7 +49,13 @@ class PreviewRequest(BaseModel):
 )
 async def first_rows(payload: PreviewRequest):
     try:
-        result = await get_first_rows(payload.folder, payload.file, settings.repository_files_dir)
+        result = await get_first_rows(
+            folder=payload.folder,
+            file=payload.file,
+            delimiter=payload.delimiter,
+            use_headers=payload.useHeaders,
+            base_dir=settings.repository_files_dir,
+        )
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
     except FileNotFoundError as e:
