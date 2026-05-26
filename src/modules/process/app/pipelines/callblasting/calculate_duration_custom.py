@@ -44,7 +44,8 @@ class CalculateDurationCustom(IPipeline):
                     pl.col(self._TMP_WORDS) / pl.lit(_PPM, dtype=pl.Float64) * _SECS_PER_MIN
                     + pl.lit(_MARGIN_SECS, dtype=pl.Float64)
                 )
-                .round(3)
+                .ceil()
+                .cast(pl.Int32)
                 .alias(Cols.seconds)
             )
             .drop(self._TMP_WORDS)

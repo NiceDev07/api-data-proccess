@@ -22,6 +22,5 @@ class CalculateCreditsCallBlasting(IPipeline):
         return df.with_columns(
             (cycles * pl.col(Cols.incremental) * cost_per_second)
             .cast(pl.Float64)
-            .round(3)
             .alias(Cols.credits)
         )
