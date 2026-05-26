@@ -5,10 +5,23 @@ Cubre:
 - Lectura de CSV (con y sin encabezados, distintos delimitadores)
 - Lectura de XLSX (con y sin encabezados)
 - NullReader (file=None) y extensión no soportada
-- Límites de filas (_MAX_ROWS=6) y columnas (_MAX_COLS=10)
+- Límite de filas (_MAX_ROWS=6) aplicado vía n_rows en el reader
 - Seguridad: archivo no encontrado y path traversal
-- Integración HTTP: respuesta con "headers" y "rows"
+- Integración HTTP: respuesta con campo "data" (formato legacy frontend)
 - Carga (stress): CSV de 100k filas y XLSX de 5k filas
+
+Formato de respuesta:
+    {
+        "success": true,
+        "data": [
+            "col1;col2;col3",        ← encabezados unidos por delimitador
+            "val1;val2;val3",        ← fila 1
+            "val4;val5;val6",        ← fila 2
+            ...
+        ]
+    }
+    data[0]  = encabezados de columnas
+    data[1:] = filas de datos (máx. _MAX_ROWS)
 
 Parámetros configurables marcados con # <-- CAMBIAR PARA FORZAR FALLO
 """
@@ -21,7 +34,7 @@ from httpx import AsyncClient, ASGITransport
 from openpyxl import Workbook
 
 from modules.process.app.files.factory import ReaderFileFactory
-from modules.process.app.files.preview import _MAX_COLS, _MAX_ROWS, get_first_rows
+from modules.process.app.files.preview import _MAX_ROWS, get_first_rows
 from modules.process.infrastructure.routes.preview import router as preview_router
 
 
@@ -72,16 +85,16 @@ class TestPreviewCSV:
 
     @pytest.mark.anyio
     async def test_csv_headers_and_rows(self, tmp_path):
-        """CSV normal con encabezados: verifica que headers y rows estén presentes y sean correctos."""
+        """CSV normal con encabezados: data[0] contiene headers, data[1:] contiene filas."""
         _write_bytes(tmp_path, "data.csv", b"nombre;edad\nAna;30\nBob;25")
         result = await get_first_rows(str(tmp_path), "data.csv", ";", True, str(tmp_path))
 
         assert result["success"] is True
-        # Los headers deben coincidir con la primera fila del CSV
-        assert result["headers"] == ["nombre", "edad"]  # <-- CAMBIAR "nombre" a "x" para forzar fallo
-        # Debe haber exactamente 2 filas de datos (no el encabezado)
-        assert len(result["rows"]) == 2
-        assert result["rows"][0] == ["Ana", "30"]
+        # data[0] = encabezados unidos por el delimitador
+        assert result["data"][0] == "nombre;edad"  # <-- CAMBIAR "nombre;edad" a "x;edad" para forzar fallo
+        # data[1:] = filas de datos
+        assert len(result["data"]) == 3             # 1 header + 2 filas
+        assert result["data"][1] == "Ana;30"
 
     @pytest.mark.anyio
     async def test_csv_no_headers(self, tmp_path):
@@ -91,8 +104,9 @@ class TestPreviewCSV:
 
         assert result["success"] is True
         # Sin encabezado Polars asigna nombres automáticos; normalize_columns los convierte a column_N
-        assert result["headers"][0] == "column_1"  # <-- CAMBIAR a "column_0" para forzar fallo
-        assert result["headers"][1] == "column_2"
+        header_cols = result["data"][0].split(";")
+        assert header_cols[0] == "column_1"  # <-- CAMBIAR a "column_0" para forzar fallo
+        assert header_cols[1] == "column_2"
 
     @pytest.mark.anyio
     async def test_csv_partial_headers(self, tmp_path):
@@ -103,47 +117,49 @@ class TestPreviewCSV:
 
         assert result["success"] is True
         # La primera columna tenía encabezado vacío → debe quedar como column_1
-        assert result["headers"][0] == "column_1"  # <-- CAMBIAR a "" para forzar fallo
-        assert result["headers"][1] == "nombre"
+        header_cols = result["data"][0].split(";")
+        assert header_cols[0] == "column_1"  # <-- CAMBIAR a "" para forzar fallo
+        assert header_cols[1] == "nombre"
 
     @pytest.mark.anyio
     async def test_csv_max_rows(self, tmp_path):
-        """CSV con 20 filas de datos: el preview devuelve solo _MAX_ROWS=6."""
+        """CSV con 20 filas de datos: el preview devuelve solo _MAX_ROWS=6 filas de datos."""
         lines = ["col"] + [f"val{i}" for i in range(20)]
         _write_bytes(tmp_path, "big.csv", "\n".join(lines).encode())
         result = await get_first_rows(str(tmp_path), "big.csv", ";", True, str(tmp_path))
 
-        # El límite es _MAX_ROWS filas de datos (sin encabezado)
-        assert len(result["rows"]) == _MAX_ROWS  # <-- CAMBIAR _MAX_ROWS a 7 para forzar fallo
+        # data[0] = header, data[1:] = filas (máx _MAX_ROWS)
+        assert len(result["data"]) == _MAX_ROWS + 1  # <-- CAMBIAR _MAX_ROWS + 1 a _MAX_ROWS + 2 para forzar fallo
 
     @pytest.mark.anyio
-    async def test_csv_max_cols(self, tmp_path):
-        """CSV con 15 columnas: el preview devuelve solo _MAX_COLS=10."""
+    async def test_csv_all_cols_returned(self, tmp_path):
+        """CSV con 15 columnas: el preview devuelve todas sin truncar."""
         headers = ";".join(f"col{i}" for i in range(15))
         values  = ";".join(str(i) for i in range(15))
         _write_bytes(tmp_path, "wide.csv", f"{headers}\n{values}".encode())
         result = await get_first_rows(str(tmp_path), "wide.csv", ";", True, str(tmp_path))
 
-        # Solo las primeras _MAX_COLS columnas deben aparecer
-        assert len(result["headers"]) == _MAX_COLS  # <-- CAMBIAR _MAX_COLS a 11 para forzar fallo
+        # El backend devuelve todas las columnas — el frontend decide cuántas mostrar
+        # data[0] son los 15 headers unidos por ";": 14 separadores
+        assert len(result["data"][0].split(";")) == 15  # <-- CAMBIAR a 10 para forzar fallo
 
     @pytest.mark.anyio
     async def test_csv_semicolon_delimiter(self, tmp_path):
-        """Delimitador punto y coma: las columnas se separan correctamente."""
+        """Delimitador punto y coma: las columnas se separan y unen correctamente."""
         _write_bytes(tmp_path, "semi.csv", b"a;b;c\n1;2;3")
         result = await get_first_rows(str(tmp_path), "semi.csv", ";", True, str(tmp_path))
 
-        assert len(result["headers"]) == 3
-        assert result["rows"][0] == ["1", "2", "3"]
+        assert result["data"][0] == "a;b;c"
+        assert result["data"][1] == "1;2;3"
 
     @pytest.mark.anyio
     async def test_csv_comma_delimiter(self, tmp_path):
-        """Delimitador coma: las columnas se separan correctamente."""
+        """Delimitador coma: las columnas se separan y unen correctamente con coma."""
         _write_bytes(tmp_path, "comma.csv", b"x,y,z\n7,8,9")
         result = await get_first_rows(str(tmp_path), "comma.csv", ",", True, str(tmp_path))
 
-        assert len(result["headers"]) == 3
-        assert result["rows"][0] == ["7", "8", "9"]
+        assert result["data"][0] == "x,y,z"
+        assert result["data"][1] == "7,8,9"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -154,7 +170,7 @@ class TestPreviewXLSX:
 
     @pytest.mark.anyio
     async def test_xlsx_headers_and_rows(self, tmp_path):
-        """XLSX normal: verifica que headers y rows estén presentes y correctos."""
+        """XLSX normal: data[0] contiene headers, data[1:] contiene filas."""
         _write_xlsx(tmp_path, "data.xlsx", [
             ["nombre", "edad"],
             ["Ana", 30],
@@ -163,9 +179,10 @@ class TestPreviewXLSX:
         result = await get_first_rows(str(tmp_path), "data.xlsx", "", True, str(tmp_path))
 
         assert result["success"] is True
-        assert result["headers"] == ["nombre", "edad"]  # <-- CAMBIAR "nombre" a "x" para forzar fallo
-        assert len(result["rows"]) == 2
-        assert result["rows"][0][0] == "Ana"
+        # XLSX sin delimitador → se usa ";" por defecto para unir columnas
+        assert result["data"][0] == "nombre;edad"  # <-- CAMBIAR "nombre;edad" a "x;edad" para forzar fallo
+        assert len(result["data"]) == 3             # 1 header + 2 filas
+        assert result["data"][1].split(";")[0] == "Ana"
 
     @pytest.mark.anyio
     async def test_xlsx_partial_headers(self, tmp_path):
@@ -180,16 +197,18 @@ class TestPreviewXLSX:
         result = await get_first_rows(str(tmp_path), "partial.xlsx", "", True, str(tmp_path))
 
         # La celda vacía es __UNNAMED__0 en Polars → normalize_columns lo convierte a column_1
-        assert result["headers"][0] == "column_1"  # <-- CAMBIAR a "" para forzar fallo
-        assert result["headers"][1] == "nombre"
+        header_cols = result["data"][0].split(";")
+        assert header_cols[0] == "column_1"  # <-- CAMBIAR a "" para forzar fallo
+        assert header_cols[1] == "nombre"
 
     @pytest.mark.anyio
     async def test_xlsx_max_rows(self, tmp_path):
-        """XLSX con 20 filas: el preview devuelve solo _MAX_ROWS=6."""
+        """XLSX con 20 filas: el preview devuelve solo _MAX_ROWS=6 filas de datos."""
         _write_xlsx(tmp_path, "big.xlsx", [["col"]], n_data_rows=20)
         result = await get_first_rows(str(tmp_path), "big.xlsx", "", True, str(tmp_path))
 
-        assert len(result["rows"]) == _MAX_ROWS  # <-- CAMBIAR _MAX_ROWS a 7 para forzar fallo
+        # data[0] = header, data[1:] = filas (máx _MAX_ROWS)
+        assert len(result["data"]) == _MAX_ROWS + 1  # <-- CAMBIAR _MAX_ROWS + 1 a _MAX_ROWS + 2 para forzar fallo
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -214,8 +233,7 @@ class TestPreviewNull:
             nameColumnDemographic="_",
         )
         lf = await reader.read(config)
-        df = lf.limit(_MAX_ROWS).collect()
-        df = df.select(df.columns[:_MAX_COLS]).fill_null("")
+        df = lf.collect().fill_null("")
 
         # DataFrame vacío → sin columnas ni filas
         assert df.columns == []   # <-- CAMBIAR a ["x"] para forzar fallo
@@ -256,7 +274,7 @@ class TestPreviewEndpoint:
 
     @pytest.mark.anyio
     async def test_endpoint_csv_ok(self, tmp_path):
-        """CSV válido: respuesta 200 con campos 'headers' y 'rows'."""
+        """CSV válido: respuesta 200 con campo 'data' (formato legacy frontend)."""
         _write_bytes(tmp_path, "test.csv", b"nombre;edad\nAna;30\nBob;25")
         app = _make_app(str(tmp_path))
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -268,14 +286,13 @@ class TestPreviewEndpoint:
         assert resp.status_code == 200
         body = resp.json()
         assert body["success"] is True
-        assert "headers" in body    # <-- CAMBIAR a "data" para forzar fallo
-        assert "rows"    in body
-        assert isinstance(body["headers"], list)
-        assert isinstance(body["rows"],    list)
+        assert "data" in body                       # <-- CAMBIAR a "headers" para forzar fallo
+        assert isinstance(body["data"], list)
+        assert body["data"][0] == "nombre;edad"     # header como primer elemento
 
     @pytest.mark.anyio
     async def test_endpoint_xlsx_ok(self, tmp_path):
-        """XLSX válido: respuesta 200 con campos 'headers' y 'rows'."""
+        """XLSX válido: respuesta 200 con campo 'data'."""
         _write_xlsx(tmp_path, "test.xlsx", [["col1", "col2"], ["val1", "val2"]])
         app = _make_app(str(tmp_path))
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -287,8 +304,8 @@ class TestPreviewEndpoint:
         assert resp.status_code == 200
         body = resp.json()
         assert body["success"] is True
-        assert "headers" in body
-        assert "rows"    in body
+        assert "data" in body
+        assert isinstance(body["data"], list)
 
     @pytest.mark.anyio
     async def test_endpoint_invalid_extension(self, tmp_path):
@@ -338,11 +355,9 @@ class TestPreviewBulk:
 
     @pytest.mark.anyio
     async def test_bulk_csv_only_returns_max_rows(self, tmp_path):
-        """CSV de 100 000 filas: el preview devuelve solo _MAX_ROWS=6 independientemente del tamaño."""
+        """CSV de 100 000 filas: el preview devuelve solo _MAX_ROWS=6 filas de datos."""
         # Generamos un CSV grande en disco
         N_ROWS = 100_000  # <-- CAMBIAR a 5 para forzar fallo (daría menos de _MAX_ROWS)
-        lines  = ["telefono;nombre;codigo"]
-        # Escribimos en bloques para no saturar memoria con una lista gigante
         csv_path = tmp_path / "bulk.csv"
         with open(csv_path, "w") as f:
             f.write("telefono;nombre;codigo\n")
@@ -351,13 +366,14 @@ class TestPreviewBulk:
 
         result = await get_first_rows(str(tmp_path), "bulk.csv", ";", True, str(tmp_path))
 
-        # Sin importar cuántas filas tenga el CSV, la preview no supera _MAX_ROWS
+        # Sin importar cuántas filas tenga el CSV, la preview no supera _MAX_ROWS datos
         assert result["success"] is True
-        assert len(result["rows"]) == _MAX_ROWS  # <-- CAMBIAR _MAX_ROWS a 7 para forzar fallo
+        # data[0] = header, data[1:] = filas → total = _MAX_ROWS + 1
+        assert len(result["data"]) == _MAX_ROWS + 1  # <-- CAMBIAR _MAX_ROWS + 1 a _MAX_ROWS + 2 para forzar fallo
 
     @pytest.mark.anyio
     async def test_bulk_xlsx_only_returns_max_rows(self, tmp_path):
-        """XLSX de 5 000 filas: el preview devuelve solo _MAX_ROWS=6."""
+        """XLSX de 5 000 filas: el preview devuelve solo _MAX_ROWS=6 filas de datos."""
         N_ROWS = 5_000  # <-- CAMBIAR a 3 para forzar fallo (daría menos de _MAX_ROWS)
         wb = Workbook()
         ws = wb.active
@@ -369,4 +385,5 @@ class TestPreviewBulk:
         result = await get_first_rows(str(tmp_path), "bulk.xlsx", "", True, str(tmp_path))
 
         assert result["success"] is True
-        assert len(result["rows"]) == _MAX_ROWS  # <-- CAMBIAR _MAX_ROWS a 7 para forzar fallo
+        # data[0] = header, data[1:] = filas → total = _MAX_ROWS + 1
+        assert len(result["data"]) == _MAX_ROWS + 1  # <-- CAMBIAR _MAX_ROWS + 1 a _MAX_ROWS + 2 para forzar fallo

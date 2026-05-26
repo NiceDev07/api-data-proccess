@@ -8,9 +8,10 @@ from logging_config import get_logger
 
 logger = get_logger(__name__)
 
-# Máximo de filas y columnas que se leen para el preview
+# Máximo de filas que se leen para el preview.
+# Se pasa como n_rows al reader para que pare a nivel de I/O (CSV)
+# o se aplique como limit() sobre el LazyFrame (XLSX).
 _MAX_ROWS = 6
-_MAX_COLS = 10
 
 
 async def get_first_rows(
@@ -56,26 +57,25 @@ async def get_first_rows(
         delimiter=delimiter or ";",
         useHeaders=use_headers,
         nameColumnDemographic="_",
+        n_rows=_MAX_ROWS,
     )
 
-    # Leemos el archivo obteniendo un LazyFrame y luego materializamos
-    # solo las primeras _MAX_ROWS filas para no cargar el archivo completo en memoria
+    # El reader aplica n_rows internamente:
+    # - CsvReader: pl.read_csv(n_rows=_MAX_ROWS) → para en I/O, no carga el archivo completo
+    # - XlsxReader: lf.limit(_MAX_ROWS) → XLSX se carga completo igual (limitación del formato)
     lf: pl.LazyFrame = await reader.read(config)
-    df: pl.DataFrame = lf.limit(_MAX_ROWS).collect()
-
-    # Limitamos a _MAX_COLS columnas para mantener la respuesta manejable
-    df = df.select(df.columns[:_MAX_COLS])
+    df: pl.DataFrame = lf.collect()
 
     # Convertimos valores nulos a cadena vacía para que el frontend no reciba null
     df = df.fill_null("")
 
-    # Construimos la respuesta estructurada separando encabezados de filas.
-    # Cada fila es una lista de strings para facilitar el renderizado en tabla.
+    # Construimos la respuesta en el formato esperado por el frontend:
+    # data[0]  = encabezados de columnas unidos por el delimitador
+    # data[1:] = filas de datos, cada una como string unido por el delimitador
+    sep: str = delimiter or ";"
     headers: list[str] = df.columns
-    rows: list[list[str]] = [
-        [str(v) for v in row]
-        for row in df.rows()
-    ]
+    rows: list[str] = [sep.join(str(v) for v in row) for row in df.rows()]
+    data: list[str] = [sep.join(headers)] + rows
 
     logger.info("Preview generado | archivo: %s | filas: %d", file, len(rows))
-    return {"success": True, "headers": headers, "rows": rows}
+    return {"success": True, "data": data}

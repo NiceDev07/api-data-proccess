@@ -21,6 +21,7 @@ class BaseFileConfig(BaseModel):
     delimiter: str = Field(..., description="Delimitador de columnas para CSV. Para XLSX enviar vacío — el campo no se usa en la lectura.")
     useHeaders: bool = Field(..., description="Si `true`, la primera fila se usa como encabezado.")
     nameColumnDemographic: str = Field(..., description="Nombre de la columna que contiene el número/email.")
+    n_rows: int | None = Field(default=None, description="Límite de filas a leer. None = sin límite (lectura completa).")
 
     @field_validator("nameColumnDemographic")
     @classmethod
@@ -95,8 +96,16 @@ class CallBlastingDataProcessingDTO(DataProcessingDTO):
 
     Extiende `DataProcessingDTO` con validaciones específicas de call blasting:
     - `subService` debe ser `"standard"` o `"custom"`.
-    - Para `standard`: se requiere `audioDuration` o `audioPath`.
+    - Para `standard`: se requiere `audioDuration` o `audioPath`. `content` no aplica.
+    - Para `custom`: se requiere `content` para el mensaje TTS.
     """
+
+    # Sobreescribe content como opcional: standard no usa mensaje de texto,
+    # solo audioPath/audioDuration. custom sí lo requiere (validado en model_validator).
+    content: Optional[str] = Field(
+        default=None,
+        description="Plantilla del mensaje TTS. Requerido solo para sub-servicio `custom`.",
+    )
 
     @field_validator("subService")
     @classmethod
@@ -106,10 +115,13 @@ class CallBlastingDataProcessingDTO(DataProcessingDTO):
         return v
 
     @model_validator(mode="after")
-    def validate_audio_source(self) -> "CallBlastingDataProcessingDTO":
+    def validate_audio_and_content(self) -> "CallBlastingDataProcessingDTO":
         if self.subService == CallBlastingSubService.standard.value:
             if self.audioDuration is None and not self.audioPath:
                 raise ValueError("AUDIO_SOURCE_REQUIRED: audioDuration or audioPath is required for standard sub-service.")
+        if self.subService == CallBlastingSubService.custom.value:
+            if not self.content:
+                raise ValueError("CONTENT_REQUIRED: content is required for custom sub-service.")
         return self
 
 

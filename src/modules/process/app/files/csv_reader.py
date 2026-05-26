@@ -17,6 +17,8 @@ class CsvReader(IFileReader):
         def _load() -> pl.LazyFrame:
             # read_csv + .lazy(): carga el archivo una vez y envuelve en plan lazy
             # para que toda la cadena de pasos se materialice una sola vez al final.
+            # n_rows: cuando viene (ej. preview), Polars para de leer a nivel de I/O —
+            # más eficiente que leer el archivo completo y luego aplicar .limit().
             kwargs = dict(
                 separator=config.delimiter,
                 encoding="utf8-lossy",
@@ -24,6 +26,7 @@ class CsvReader(IFileReader):
                 has_header=config.useHeaders,
                 infer_schema_length=1000,
                 ignore_errors=False,
+                **({"n_rows": config.n_rows} if config.n_rows is not None else {}),
             )
             try:
                 return pl.read_csv(file_path, **kwargs).lazy()

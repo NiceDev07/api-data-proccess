@@ -15,10 +15,15 @@ class XlsxReader(IFileReader):
         file_path = config.folder
 
         def _load() -> pl.LazyFrame:
-            return pl.read_excel(
+            lf = pl.read_excel(
                 file_path,
                 has_header=config.useHeaders,
             ).lazy()
+            # read_excel no soporta n_rows nativo — aplicamos limit() sobre el LazyFrame.
+            # Para XLSX el archivo se carga completo de todas formas (limitación del formato).
+            if config.n_rows is not None:
+                lf = lf.limit(config.n_rows)
+            return lf
 
         try:
             lf = await asyncio.to_thread(_load)
