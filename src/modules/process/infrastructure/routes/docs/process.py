@@ -95,15 +95,14 @@ PROCESSING_EXAMPLES = {
         },
     },
     "call_blasting_standard": {
-        "summary": "Call Blasting — standard (audioDuration)",
+        "summary": "Call Blasting — standard (audioPath)",
         "value": {
-            "content": "",
+            "content": None,
             "tariffId": 1,
             "campaignId": [999003],
             "codeGroup": "LPWZ6134",
             "subService": "standard",
-            "audioDuration": 20,
-            "audioPath": None,
+            "audioPath": "/ruta/al/audio.mp3",
             "useExclusionList": False,
             "configListExclusion": None,
             "configFile": {
@@ -134,7 +133,6 @@ PROCESSING_EXAMPLES = {
             "campaignId": [999004],
             "codeGroup": "NFHJ8823",
             "subService": "custom",
-            "audioDuration": None,
             "audioPath": None,
             "useExclusionList": False,
             "configListExclusion": None,
@@ -194,7 +192,7 @@ PROCESSING_DESCRIPTION = (
     "**Call Blasting**\n"
     "- Valida el número, asigna operador y calcula duración y créditos del audio.\n"
     "- subService: standard o custom.\n"
-    "- Para standard hay que enviar audioDuration en segundos o audioPath con la ruta al archivo de audio.\n"
+    "- Para standard hay que enviar audioPath con la ruta al archivo de audio (ffprobe calcula la duración).\n"
     "- Para custom la duración se calcula desde el texto del mensaje, no se necesita audio previo.\n"
     "- Los números sin tarifa configurada quedan excluidos con razón NO_COST.\n\n"
     "### Notas\n"
@@ -205,7 +203,7 @@ PROCESSING_DESCRIPTION = (
 
 PROCESSING_RESPONSES = {
     200: {"description": "Procesamiento exitoso. Retorna summaryGeneral, summaryGroup y violations."},
-    400: {"description": "Payload inválido: campo faltante, subService no permitido, shortname requerido, o audioDuration/audioPath faltante para call_blasting standard."},
+    400: {"description": "Payload inválido: campo faltante, subService no permitido, shortname requerido, o audioPath faltante para call_blasting standard."},
     404: {"description": "Archivo de campaña no encontrado en la ruta indicada."},
     500: {"description": "Error interno del servidor."},
 }

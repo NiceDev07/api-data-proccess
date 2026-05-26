@@ -8,8 +8,8 @@ class Cols:
     credits: Final[str] = "__CREDITS__"
     pdu: Final[str] = "__PDU__"               # SMS: Protocol Data Units
     seconds: Final[str] = "__SECONDS__"       # Call Blasting: duración del audio en segundos
-    initial: Final[str] = "__INITIAL__"       # Call Blasting: costo inicial por llamada
-    incremental: Final[str] = "__INCREMENTAL__"  # Call Blasting: costo por segundo adicional
+    initial: Final[str] = "__INITIAL__"       # Call Blasting: ciclos mínimos a facturar por llamada
+    incremental: Final[str] = "__INCREMENTAL__"  # Call Blasting: segundos por ciclo de facturación
     identifier: Final[str] = "__IDENTIFIER__"
     cost: Final[str] = "__COST__"
     service: Final[str] = "__SERVICE__"

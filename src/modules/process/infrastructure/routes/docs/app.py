@@ -18,7 +18,7 @@ APP_DESCRIPTION = (
     "## Cosas a tener en cuenta\n"
     "- **configFile.folder** debe ser la ruta completa al archivo, no al directorio que lo contiene.\n"
     "- Los registros excluidos aparecen en violations (SMS) o en summaryGroup con total_excluded.\n"
-    "- Para Call Blasting standard hay que enviar audioDuration en segundos o audioPath con la ruta al audio."
+    "- Para Call Blasting standard hay que enviar audioPath con la ruta al audio (ffprobe calcula la duración)."
 )
 
 OPENAPI_TAGS = [

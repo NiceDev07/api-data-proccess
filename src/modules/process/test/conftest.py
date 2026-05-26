@@ -157,7 +157,6 @@ def make_ctx(
     rules:           RulesCountry | None = None,
     use_exclusion:   bool  = False,
     excl_config:     ConfigListExclusion | None = None,
-    audio_duration:  float | None = None,
     audio_path:      str   | None = None,
     tariff_id:       int   = 1,
     campaign_id:     list[int] | None = None,
@@ -176,7 +175,6 @@ def make_ctx(
         configFile=make_config_file(demographic=demographic),
         rulesCountry=rules or BASE_RULES_SMS,
         infoUserValidSend=InfoUserValidSend(levelUser=2, demographic=""),
-        audioDuration=audio_duration,
         audioPath=audio_path,
         subject=subject,
     )

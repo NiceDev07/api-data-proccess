@@ -40,7 +40,6 @@ from modules.process.app.regulations.sms import (
     ShortNameRegulation,
     SpecialCharRegulation,
 )
-from modules.process.domain.constants.callblasting import OPERATION_MARGIN_SECS
 from modules.process.domain.constants.cols import Cols
 from modules.process.domain.constants.reasons import ExclusionReason
 from modules.process.domain.models.process_dto import ConfigListExclusion, RulesCountry
@@ -737,27 +736,37 @@ class TestCalculateDurationCustom:
     _pipe = CalculateDurationCustom()
 
     async def test_duration_per_record(self):
-        # 85 words → ceil(85/170 * 60) + margin = ceil(30) + 5 = 35
-        # 170 words → ceil(170/170 * 60) + margin = 60 + 5 = 65
+        # Fórmula: ceil(words / 170 * 60 + 7)
+        # 85 words  → ceil(30 + 7)  = ceil(37)  = 37
+        # 170 words → ceil(60 + 7)  = ceil(67)  = 67
         words_85  = " ".join(["hola"] * 85)
         words_170 = " ".join(["test"] * 170)
         df = pl.DataFrame(
             {Cols.message: [words_85, words_170], Cols.is_ok: [True, True]},
         )
         result = await self._pipe.execute(df, make_ctx())
-        assert result[Cols.seconds][0] == 35
-        assert result[Cols.seconds][1] == 65
+        assert result[Cols.seconds][0] == 37   # <-- CAMBIAR a 35 para forzar fallo
+        assert result[Cols.seconds][1] == 67   # <-- CAMBIAR a 65 para forzar fallo
 
     async def test_single_word_gets_minimum_plus_margin(self):
         df = pl.DataFrame({Cols.message: ["hola"], Cols.is_ok: [True]})
         result = await self._pipe.execute(df, make_ctx())
-        # ceil(1/170*60) = ceil(0.35) = 1 → 1 + 5 = 6
-        assert result[Cols.seconds][0] == 1 + OPERATION_MARGIN_SECS
+        # ceil(1/170*60 + 7) = ceil(0.35 + 7) = ceil(7.35) = 8
+        assert result[Cols.seconds][0] == 8    # <-- CAMBIAR a 6 para forzar fallo
+
+    async def test_compact_text_fallback(self):
+        """Texto largo sin espacios: fallback len//5 para estimar palabras."""
+        # 1 palabra detectada pero 110 caracteres → fallback: max(1, 110//5) = 22 palabras
+        # ceil(22/170*60 + 7) = ceil(7.76 + 7) = ceil(14.76) = 15
+        compact = "a" * 110
+        df = pl.DataFrame({Cols.message: [compact], Cols.is_ok: [True]})
+        result = await self._pipe.execute(df, make_ctx())
+        assert result[Cols.seconds][0] == 15   # <-- CAMBIAR a 8 para forzar fallo
 
     async def test_excludes_tmp_columns(self):
         df = pl.DataFrame({Cols.message: ["uno dos tres"], Cols.is_ok: [True]})
         result = await self._pipe.execute(df, make_ctx())
-        assert "__cb_word_count__" not in result.columns
+        assert "__cb_word_count__" not in result.columns  # <-- CAMBIAR a "message" para forzar fallo
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -765,35 +774,33 @@ class TestCalculateDurationCustom:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestCalculateDurationStandard:
-    async def test_from_audio_duration(self):
-        df = pl.DataFrame({"phone": [1, 2]})
-        ctx = make_ctx(audio_duration=30.5)
-        result = await CalculateDurationStandard(MagicMock()).execute(df, ctx)
-        # ceil(30.5) + 5 = 31 + 5 = 36
-        assert (result[Cols.seconds] == 36).all()
-
     async def test_from_audio_path_calls_provider(self):
-        df = pl.DataFrame({"phone": [1]})
+        """El provider devuelve ceil(audio) + 5s de margen — el pipeline lo usa directo."""
+        df = pl.DataFrame({"phone": [1, 2]})
         provider = MagicMock()
-        provider.get_duration = AsyncMock(return_value=25.0)
-        ctx = make_ctx(audio_duration=None, audio_path="/audio/test.mp3")
+        provider.get_duration = AsyncMock(return_value=36)  # ceil(30.5)+5 ya viene del provider
+        ctx = make_ctx(audio_path="/audio/test.mp3")
         result = await CalculateDurationStandard(provider).execute(df, ctx)
         provider.get_duration.assert_called_once_with("/audio/test.mp3")
-        # ceil(25.0) + 5 = 25 + 5 = 30
-        assert (result[Cols.seconds] == 30).all()
+        assert (result[Cols.seconds] == 36).all()  # <-- CAMBIAR a 30 para forzar fallo
 
-    async def test_no_source_raises_value_error(self):
-        df = pl.DataFrame({"phone": [1]})
-        ctx = make_ctx(audio_duration=None, audio_path=None)
-        with pytest.raises(ValueError, match="audioDuration.*audioPath"):
-            await CalculateDurationStandard(MagicMock()).execute(df, ctx)
+    async def test_duration_applied_to_all_records(self):
+        """El mismo valor de duración se aplica a todos los registros."""
+        df = pl.DataFrame({"phone": [1, 2, 3]})
+        provider = MagicMock()
+        provider.get_duration = AsyncMock(return_value=11)  # ceil(5.319)+5 = 11
+        ctx = make_ctx(audio_path="/audio/test.mp3")
+        result = await CalculateDurationStandard(provider).execute(df, ctx)
+        assert (result[Cols.seconds] == 11).all()  # <-- CAMBIAR a 10 para forzar fallo
 
     async def test_minimum_one_second(self):
+        """Si el provider devuelve 0 (audio vacío), max(1,0) garantiza al menos 1 segundo."""
         df = pl.DataFrame({"phone": [1]})
-        ctx = make_ctx(audio_duration=0.0)
-        result = await CalculateDurationStandard(MagicMock()).execute(df, ctx)
-        # max(1, ceil(0.0)) + 5 = 1 + 5 = 6
-        assert (result[Cols.seconds] == 6).all()
+        provider = MagicMock()
+        provider.get_duration = AsyncMock(return_value=0)
+        ctx = make_ctx(audio_path="/audio/silence.mp3")
+        result = await CalculateDurationStandard(provider).execute(df, ctx)
+        assert (result[Cols.seconds] == 1).all()   # <-- CAMBIAR a 0 para forzar fallo
 
 
 # ─────────────────────────────────────────────────────────────────────────────

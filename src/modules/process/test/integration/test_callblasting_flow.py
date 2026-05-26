@@ -3,6 +3,8 @@ Tests de integración — CallBlastingProcessor end-to-end.
 
 El DataFrame de entrada se construye inline (no requiere archivo CSV).
 Los servicios externos (numeration, cost, exclusion, duration) se mockean.
+
+Parámetros configurables marcados con # <-- CAMBIAR PARA FORZAR FALLO
 """
 from pathlib import Path
 
@@ -61,26 +63,28 @@ def cb_ctx(**kwargs):
     return make_ctx(**kwargs)
 
 
-# ── tests: standard ──────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Tests: standard
+# ══════════════════════════════════════════════════════════════════════════════
 
 async def test_cb_standard_happy_path():
-    """Dos registros válidos con audioDuration → créditos calculados y parquet guardado."""
-    processor, storage = make_processor("standard_happy_path")
-    ctx = cb_ctx(content="", sub_service="standard", audio_duration=30.0)
+    """Dos registros válidos con audioPath → créditos calculados y parquet guardado."""
+    processor, storage = make_processor("standard_happy_path", duration_secs=30.0)
+    ctx = cb_ctx(content="", sub_service="standard", audio_path="/audio/test.mp3")
     result = await processor.process(base_df(), ctx)
     save_summary("callblasting_flow/standard_happy_path", result)
 
     assert result["success"] is True
     sg = result["summaryGeneral"]
-    assert sg["total_records"] == 2
+    assert sg["total_records"] == 2           # <-- CAMBIAR a 3 para forzar fallo
     assert sg["total_excluded"] == 0
     assert sg["total_seconds"] > 0
     assert sg["total_credits"] > 0
 
 
 async def test_cb_standard_audio_path_uses_provider():
-    """audioPath sin audioDuration → duración resuelta vía duration_provider."""
-    processor, storage = make_processor("standard_audio_path", duration_secs=45.0)
+    """audioPath → duración resuelta vía duration_provider (ffprobe)."""
+    processor, storage = make_processor("standard_audio_path", duration_secs=45)
     ctx = cb_ctx(content="", sub_service="standard", audio_path="/tmp/audio.mp3")
     result = await processor.process(base_df(), ctx)
     save_summary("callblasting_flow/standard_audio_path", result)
@@ -89,39 +93,31 @@ async def test_cb_standard_audio_path_uses_provider():
     assert result["summaryGeneral"]["total_records"] == 2
 
     saved = storage.last_df()
-    # duration_mock returns 45.0 → ceil(45) + OPERATION_MARGIN_SECS(5) = 50
-    assert (saved.filter(pl.col(Cols.is_ok))[Cols.seconds] == 50).all()
-
-
-async def test_cb_standard_no_duration_raises():
-    """Sin audioDuration ni audioPath → ValueError antes de guardar."""
-    processor, _ = make_processor("standard_no_duration")
-    ctx = cb_ctx(content="", sub_service="standard")
-    with pytest.raises(ValueError, match="audioDuration"):
-        await processor.process(base_df(), ctx)
+    # duration_mock retorna 45 (provider ya incluye el margen) → seconds = 45
+    assert (saved.filter(pl.col(Cols.is_ok))[Cols.seconds] == 45).all()  # <-- CAMBIAR a 50 para forzar fallo
 
 
 async def test_cb_standard_parquet_columns():
     """El parquet estándar debe contener columnas de salida + auditoría; sin message."""
-    processor, storage = make_processor("standard_parquet")
-    ctx = cb_ctx(content="", sub_service="standard", audio_duration=20.0)
+    processor, storage = make_processor("standard_parquet", duration_secs=20.0)
+    ctx = cb_ctx(content="", sub_service="standard", audio_path="/audio/test.mp3")
     await processor.process(base_df(), ctx)
 
     loaded = pl.read_parquet(storage.saved_paths[0])
     for col in (Cols.number_concat, Cols.number_operator, Cols.seconds, Cols.credits,
                 Cols.is_ok, Cols.error_code):
-        assert col in loaded.columns
+        assert col in loaded.columns           # <-- CAMBIAR a un col inexistente para forzar fallo
     assert Cols.message not in loaded.columns
 
 
 async def test_cb_standard_summary_group_by_operator():
     """Un único prefijo de costo → un único grupo en summaryGroup."""
-    processor, _ = make_processor("standard_groups")
-    ctx = cb_ctx(content="", sub_service="standard", audio_duration=30.0)
+    processor, _ = make_processor("standard_groups", duration_secs=30.0)
+    ctx = cb_ctx(content="", sub_service="standard", audio_path="/audio/test.mp3")
     result = await processor.process(base_df(), ctx)
 
     groups = result["summaryGroup"]
-    assert len(groups) == 1
+    assert len(groups) == 1                    # <-- CAMBIAR a 2 para forzar fallo
     assert groups[0]["operator"] == "COLOMBIA"
     assert groups[0]["total"] == 2
 
@@ -129,19 +125,21 @@ async def test_cb_standard_summary_group_by_operator():
 async def test_cb_standard_credits_calculation():
     """Fórmula: cycles=initial cuando seconds<=initial → créditos esperados."""
     # cost=0.06, initial=30, incremental=15 → cost_per_second=0.001
-    # audio_duration=20 → seconds=ceil(20)+5=25 ≤ initial(30)
-    # cycles=initial=30, credits=30*15*0.001=0.45 por registro
-    processor, storage = make_processor("standard_credits")
-    ctx = cb_ctx(content="", sub_service="standard", audio_duration=20.0)
+    # provider devuelve 25 (ya con margen) ≤ initial(30) → cycles=initial=30
+    # credits=30*15*0.001=0.45 por registro
+    processor, storage = make_processor("standard_credits", duration_secs=25)
+    ctx = cb_ctx(content="", sub_service="standard", audio_path="/audio/test.mp3")
     result = await processor.process(base_df(), ctx)
 
-    assert result["summaryGeneral"]["total_credits"] == pytest.approx(0.45 * 2, abs=1e-3)
+    assert result["summaryGeneral"]["total_credits"] == pytest.approx(0.45 * 2, abs=1e-3)  # <-- CAMBIAR 0.45 para forzar fallo
     valid = storage.last_df().filter(pl.col(Cols.is_ok))
     for c in valid[Cols.credits].to_list():
         assert c == pytest.approx(0.45, abs=1e-3)
 
 
-# ── tests: custom ─────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Tests: custom
+# ══════════════════════════════════════════════════════════════════════════════
 
 async def test_cb_custom_happy_path():
     """Dos registros con mensaje personalizado → segundos y créditos calculados."""
@@ -167,7 +165,7 @@ async def test_cb_custom_parquet_has_message_column():
 
     loaded = pl.read_parquet(storage.saved_paths[0])
     for col in (Cols.message, Cols.seconds, Cols.credits):
-        assert col in loaded.columns
+        assert col in loaded.columns           # <-- CAMBIAR a un col inexistente para forzar fallo
 
 
 async def test_cb_custom_per_record_seconds():
@@ -185,10 +183,12 @@ async def test_cb_custom_per_record_seconds():
 
     valid = storage.last_df().filter(pl.col(Cols.is_ok))
     secs = valid[Cols.seconds].to_list()
-    assert secs[1] > secs[0]
+    assert secs[1] > secs[0]                  # <-- CAMBIAR a secs[0] > secs[1] para forzar fallo
 
 
-# ── tests: exclusión y operador ───────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Tests: exclusión y operador
+# ══════════════════════════════════════════════════════════════════════════════
 
 async def test_cb_exclusion_list():
     """Número en lista de exclusión → marcado y no contabilizado en créditos."""
@@ -198,7 +198,7 @@ async def test_cb_exclusion_list():
     ctx = cb_ctx(
         content="",
         sub_service="standard",
-        audio_duration=30.0,
+        audio_path="/audio/test.mp3",
         use_exclusion=True,
         excl_config=excl_cfg,
     )
@@ -206,7 +206,7 @@ async def test_cb_exclusion_list():
     save_summary("callblasting_flow/exclusion", result)
 
     sg = result["summaryGeneral"]
-    assert sg["total_records"] == 1
+    assert sg["total_records"] == 1           # <-- CAMBIAR a 2 para forzar fallo
     assert sg["total_excluded"] == 1
 
     nok = storage.last_df().filter(~pl.col(Cols.is_ok))
@@ -224,12 +224,12 @@ async def test_cb_no_operator_excluded():
         storage=AnalysisStorage("callblasting_flow/no_operator"),
         duration_provider=duration_mock(),
     )
-    ctx = cb_ctx(content="", sub_service="standard", audio_duration=30.0)
+    ctx = cb_ctx(content="", sub_service="standard", audio_path="/audio/test.mp3")
     result = await processor_partial.process(base_df(), ctx)
     save_summary("callblasting_flow/no_operator", result)
 
     sg = result["summaryGeneral"]
-    assert sg["total_records"] == 1
+    assert sg["total_records"] == 1           # <-- CAMBIAR a 2 para forzar fallo
     assert sg["total_excluded"] == 1
 
 
@@ -252,12 +252,12 @@ async def test_cb_all_excluded_zero_credits():
         storage=AnalysisStorage("callblasting_flow/all_excluded"),
         duration_provider=duration_mock(),
     )
-    ctx = cb_ctx(content="", sub_service="standard", audio_duration=30.0)
+    ctx = cb_ctx(content="", sub_service="standard", audio_path="/audio/test.mp3")
     result = await processor_all_excl.process(base_df(), ctx)
     save_summary("callblasting_flow/all_excluded", result)
 
     sg = result["summaryGeneral"]
-    assert sg["total_records"] == 0
+    assert sg["total_records"] == 0           # <-- CAMBIAR a 1 para forzar fallo
     assert sg["total_excluded"] == 2
     assert sg["total_credits"] == pytest.approx(0.0)
     assert sg["total_seconds"] == 0
