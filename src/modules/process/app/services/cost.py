@@ -3,7 +3,7 @@ from modules.process.infrastructure.repositories.cost import ServiceKey, CBServi
 
 
 class CostService:
-    KEY = "cost"
+    KEY = "cost:v1"
     TTL = 60 * 60  # 1 hora — tariffs son config estática; invalidar explícitamente si cambian
 
     def __init__(self, cost_repo, cache: ICache):

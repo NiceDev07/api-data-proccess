@@ -9,8 +9,8 @@ logger = get_logger(__name__)
 
 
 class NumeracionRepository(INumeracionRepository):
-    def __init__(self, db_numeracioon: AsyncSession):
-        self.db_connection = db_numeracioon
+    def __init__(self, db_numeracion: AsyncSession):
+        self.db_connection = db_numeracion
 
     async def get_numeracion(self, country_id: int) -> List[Tuple[int, int, str]]:
         try:

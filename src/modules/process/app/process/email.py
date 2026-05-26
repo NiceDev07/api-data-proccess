@@ -7,14 +7,11 @@ from modules.process.domain.models.summary import EmailCampaignSummary, EmailSum
 from modules.process.domain.constants.cols import Cols
 from modules.process.app.normalizers.email import EmailNormalizer
 from modules.process.app.helpers import attach_identifier
-from modules.process.app.pipelines import CustomMessage, SaveResults
-from modules.process.app.pipelines.custom_subject import CustomSubject
-from modules.process.app.pipelines.assign_cost_email import AssignCostEmail
-from modules.process.app.pipelines.calculate_credits_email import CalculateCreditsEmail
-from modules.process.app.pipelines.clean_data_email import CleanDataEmail
-from modules.process.app.pipelines.exclution_email import ExclutionEmail
-from modules.process.app.pipelines.extract_email_domain import ExtractEmailDomain
-from modules.process.app.pipelines.validate_email import ValidateEmail
+from modules.process.app.pipelines import (
+    CustomMessage, SaveResults,
+    CustomSubject, AssignCostEmail, CalculateCreditsEmail,
+    CleanDataEmail, ExclutionEmail, ExtractEmailDomain, ValidateEmail,
+)
 from logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -87,10 +84,6 @@ class EmailProcessor(IDataProcessor):
 
         summary = self._build_summary(df)
         sg = summary.summaryGeneral
-        logger.debug(
-            "Email pipeline finalizado | válidos: %d | excluidos: %d",
-            sg.total_records, sg.total_excluded,
-        )
         logger.info(
             "Email completado | válidos: %d | excluidos: %d | créditos: %g",
             sg.total_records, sg.total_excluded, sg.total_credits,

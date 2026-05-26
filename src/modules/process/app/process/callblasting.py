@@ -87,16 +87,11 @@ class CallBlastingProcessor(IDataProcessor):
             "CallBlasting [%s] iniciado | campaña: %s | registros: %d",
             payload.subService, payload.campaignId, df.height,
         )
-        logger.debug("CallBlasting pipeline | total registros entrada: %d", df.height)
         for step in steps:
             df = await step.execute(df, payload)
 
         summary = self._build_summary(df)
         sg = summary.summaryGeneral
-        logger.debug(
-            "CallBlasting pipeline finalizado | válidos: %d | excluidos: %d",
-            sg.total_records, sg.total_excluded,
-        )
         logger.info(
             "CallBlasting completado | válidos: %d | excluidos: %d | segundos: %d | créditos: %g",
             sg.total_records, sg.total_excluded, sg.total_seconds, sg.total_credits,

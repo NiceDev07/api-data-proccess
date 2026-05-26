@@ -202,3 +202,14 @@ CLAUDE.md
 SKILL.md
 postman-guide.md
 skills-lock.json
+
+# Scripts de operaciones puntuales (datos sensibles / credenciales)
+scripts/fix_id_client_email.py
+scripts/_fix_missing_names.py
+scripts/fix_email_identifier.py
+test_bulk_insert.py
+test_bulk_insert_email.py
+
+# Reportes y archivos de datos subidos manualmente
+*.xlsx
+!src/

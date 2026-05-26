@@ -1,5 +1,6 @@
 from enum import Enum
 
+
 class ServiceType(str, Enum):
     sms = "sms"
     email = "email"

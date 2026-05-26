@@ -1,105 +1,31 @@
-import asyncio
-import io
 import os
 
 import polars as pl
 
+from modules.process.app.files.factory import ReaderFileFactory
+from modules.process.domain.models.process_dto import BaseFileConfig
 from logging_config import get_logger
 
 logger = get_logger(__name__)
 
-# Encodings que se prueban en orden — latin1 siempre funciona como último recurso
-_ENCODINGS = ("utf_8_sig", "cp1252", "latin1")
-
-# Máximo de filas y columnas que se leen para el preview
+# Máximo de filas que se leen para el preview.
+# Se pasa como n_rows al reader para que pare a nivel de I/O (CSV)
+# o se aplique como limit() sobre el LazyFrame (XLSX).
 _MAX_ROWS = 6
-_MAX_COLS = 10
 
 
-def _detect_encoding(path: str) -> str:
-    # Intenta abrir el archivo con cada encoding; retorna el primero que no falle.
-    # latin1 es el último y siempre tiene éxito (mapea los 256 valores de byte).
-    for enc in _ENCODINGS:
-        try:
-            with open(path, encoding=enc) as f:
-                f.read(4096)
-            return enc
-        except (UnicodeDecodeError, LookupError):
-            continue
-    return _ENCODINGS[-1]  # fallback explícito — solo alcanzable si _ENCODINGS está vacío
-
-
-def _detect_delimiter(path: str, encoding: str) -> str:
-    # Lee 64 KB y cuenta comas, puntos y coma y tabs fuera de comillas dobles
-    try:
-        with open(path, encoding=encoding, errors="replace") as f:
-            sample = f.read(65536)
-    except Exception:
-        return ";"
-
-    commas = 0
-    semicolons = 0
-    tabs = 0
-    in_quotes = False
-
-    for ch in sample:
-        if ch == '"':
-            in_quotes = not in_quotes
-        elif not in_quotes:
-            if ch == ',':
-                commas += 1
-            elif ch == ';':
-                semicolons += 1
-            elif ch == '\t':
-                tabs += 1
-
-    # Retorna el delimitador más frecuente; en caso de empate gana el punto y coma
-    counts = {',': commas, ';': semicolons, '\t': tabs}
-    return max(counts, key=lambda k: counts[k])
-
-
-def _read_csv(file_path: str) -> list[str]:
-    enc = _detect_encoding(file_path)
-    sep = _detect_delimiter(file_path, enc)
-
-    # Polars solo soporta UTF-8 — leemos solo las primeras líneas necesarias con Python
-    # (evita cargar un archivo de cientos de miles de filas completo en memoria)
-    lines = []
-    with open(file_path, encoding=enc, errors="replace") as f:
-        for _ in range(_MAX_ROWS):
-            line = f.readline()
-            if not line:
-                break
-            lines.append(line)
-
-    content = "".join(lines)
-
-    df = (
-        pl.read_csv(
-            io.BytesIO(content.encode("utf-8")),
-            n_rows=_MAX_ROWS,
-            has_header=False,
-            separator=sep,
-            infer_schema=False,
-        )
-    )
-    df = df.select(df.columns[:_MAX_COLS]).fill_null("")
-
-    # Serializa cada fila como un string plano usando el delimitador detectado
-    return [sep.join(map(str, row)) for row in df.rows()]
-
-
-def _read_xlsx(file_path: str) -> list[str]:
-    df = pl.read_excel(file_path, read_options={"n_rows": _MAX_ROWS})
-    df = df.select(df.columns[:_MAX_COLS]).fill_null("")
-
-
-    # XLSX no tiene delimitador nativo — usamos coma para serializar
-    return [",".join(map(str, row)) for row in df.rows()]
-
-
-async def get_first_rows(folder: str, file: str, base_dir: str) -> dict:
-    # Construye y resuelve la ruta real para prevenir path traversal (../, symlinks, etc.)
+async def get_first_rows(
+    folder: str,
+    file: str,
+    delimiter: str,
+    use_headers: bool,
+    base_dir: str,
+) -> dict:
+    # ─────────────────────────────────────────────────────────────
+    # Validación de seguridad: path traversal
+    # Nos aseguramos de que el archivo esté dentro del directorio autorizado
+    # antes de intentar leerlo, para evitar acceso a rutas arbitrarias del sistema.
+    # ─────────────────────────────────────────────────────────────
     file_path = os.path.realpath(os.path.join(folder, file))
     allowed   = os.path.realpath(base_dir)
 
@@ -107,13 +33,49 @@ async def get_first_rows(folder: str, file: str, base_dir: str) -> dict:
         logger.warning("Path traversal attempt blocked: %s", file_path)
         raise PermissionError("ACCESS_DENIED: Path is outside the authorized directory.")
 
+    # Verificamos que el archivo exista en disco antes de intentar abrirlo
     if not os.path.isfile(file_path):
         logger.warning("File not found for preview: %s", file_path)
         raise FileNotFoundError("FILE_NOT_FOUND: The file was not found at the specified path.")
 
-    ext = file.rsplit(".", 1)[-1].lower()
-    reader = _read_csv if ext == "csv" else _read_xlsx
+    # ─────────────────────────────────────────────────────────────
+    # Obtención del reader correcto a través de la factory
+    # ReaderFileFactory devuelve CsvReader, XlsxReader o NullReader
+    # según la extensión del archivo, sin que aquí necesitemos saber
+    # cuál es la implementación concreta.
+    # ─────────────────────────────────────────────────────────────
+    factory = ReaderFileFactory()
+    reader  = factory.create(file)
 
-    rows = await asyncio.to_thread(reader, file_path)
+    # Construimos la configuración mínima que necesitan los readers.
+    # - folder: ruta completa al archivo (los readers usan config.folder como path)
+    # - nameColumnDemographic: campo requerido por BaseFileConfig pero no usado
+    #   en la lectura inicial; se pasa un placeholder para satisfacer el modelo.
+    config = BaseFileConfig(
+        folder=file_path,
+        file=file,
+        delimiter=delimiter or ";",
+        useHeaders=use_headers,
+        nameColumnDemographic="_",
+        n_rows=_MAX_ROWS,
+    )
+
+    # El reader aplica n_rows internamente:
+    # - CsvReader: pl.read_csv(n_rows=_MAX_ROWS) → para en I/O, no carga el archivo completo
+    # - XlsxReader: lf.limit(_MAX_ROWS) → XLSX se carga completo igual (limitación del formato)
+    lf: pl.LazyFrame = await reader.read(config)
+    df: pl.DataFrame = lf.collect()
+
+    # Convertimos valores nulos a cadena vacía para que el frontend no reciba null
+    df = df.fill_null("")
+
+    # Construimos la respuesta en el formato esperado por el frontend:
+    # data[0]  = encabezados de columnas unidos por el delimitador
+    # data[1:] = filas de datos, cada una como string unido por el delimitador
+    sep: str = delimiter or ";"
+    headers: list[str] = df.columns
+    rows: list[str] = [sep.join(str(v) for v in row) for row in df.rows()]
+    data: list[str] = [sep.join(headers)] + rows
+
     logger.info("Preview generado | archivo: %s | filas: %d", file, len(rows))
-    return {"success": True, "data": rows}
+    return {"success": True, "data": data}

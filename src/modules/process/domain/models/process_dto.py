@@ -4,8 +4,6 @@ from modules.process.domain.enums.sub_services import SmsSubService, CallBlastin
 from modules.process.domain.utils import normalize_col_name
 
 
-
-
 class RulesCountry(BaseModel):
     idCountry: int = Field(..., description="ID del país en la base de numeración.", examples=[81])
     codeCountry: int = Field(..., description="Código telefónico del país (sin +).", examples=[57])
@@ -20,9 +18,10 @@ class RulesCountry(BaseModel):
 class BaseFileConfig(BaseModel):
     folder: str = Field(..., description="Ruta absoluta al directorio que contiene el archivo.")
     file: str = Field(..., description="Nombre del archivo con extensión (CSV o XLSX).")
-    delimiter: str = Field(..., description="Delimitador de columnas para CSV. Dejar vacío para XLSX.")
+    delimiter: str = Field(..., description="Delimitador de columnas para CSV. Para XLSX enviar vacío — el campo no se usa en la lectura.")
     useHeaders: bool = Field(..., description="Si `true`, la primera fila se usa como encabezado.")
     nameColumnDemographic: str = Field(..., description="Nombre de la columna que contiene el número/email.")
+    n_rows: int | None = Field(default=None, description="Límite de filas a leer. None = sin límite (lectura completa).")
 
     @field_validator("nameColumnDemographic")
     @classmethod
@@ -59,7 +58,9 @@ class ConfigLabel(BaseModel):
 
 
 class DataProcessingDTO(BaseModel):
-    content: str = Field(..., description="Plantilla del mensaje. Puede incluir etiquetas `{columna}` para personalización.", examples=["Hola {nombre}, tu código es {codigo}."])
+    # Requerido para SMS y call_blasting custom (plantilla del mensaje).
+    # Opcional para call_blasting standard (usa audio, no texto).
+    content: Optional[str] = Field(None, description="Plantilla del mensaje. Puede incluir etiquetas `{columna}` para personalización. Requerido para SMS y call_blasting custom.", examples=["Hola {nombre}, tu código es {codigo}."])
     shortname: Optional[str] = Field(None, description="Remitente SMS. Obligatorio solo cuando `rulesCountry.useShortName=true` y debe estar incluido en `content`.")
     tariffId: int = Field(..., description="ID de la tarifa a aplicar para el cálculo de créditos.", examples=[1])
     campaignId: List[int] = Field(default_factory=list, description="IDs de campaña. Opcional cuando se envía codeGroup.", examples=[[999001]])
@@ -78,8 +79,7 @@ class DataProcessingDTO(BaseModel):
     rulesCountry: RulesCountry = Field(..., description="Reglas del país: prefijos, límites de caracteres y validación de números.")
     infoUserValidSend: InfoUserValidSend = Field(..., description="Información del nivel de usuario para validación de capacidad.")
     subject: Optional[str] = Field(None, description="Asunto del correo. Obligatorio para el servicio `email`.")
-    audioDuration: Optional[float] = Field(None, description="Duración del audio en segundos. Requerido para `call_blasting` sub-servicio `standard` si no se provee `audioPath`.")
-    audioPath: Optional[str] = Field(None, description="Ruta local al archivo de audio. Alternativa a `audioDuration` para `call_blasting standard`.")
+    audioPath: Optional[str] = Field(None, description="Ruta local al archivo de audio. Requerido para `call_blasting standard`.")
     configLabels: List[ConfigLabel] = Field(
         default_factory=list,
         description=(
@@ -97,7 +97,8 @@ class CallBlastingDataProcessingDTO(DataProcessingDTO):
 
     Extiende `DataProcessingDTO` con validaciones específicas de call blasting:
     - `subService` debe ser `"standard"` o `"custom"`.
-    - Para `standard`: se requiere `audioDuration` o `audioPath`.
+    - Para `standard`: se requiere `audioPath` (ruta al archivo de audio).
+    - Para `custom`: se requiere `content` para el mensaje TTS.
     """
 
     @field_validator("subService")
@@ -110,8 +111,11 @@ class CallBlastingDataProcessingDTO(DataProcessingDTO):
     @model_validator(mode="after")
     def validate_audio_source(self) -> "CallBlastingDataProcessingDTO":
         if self.subService == CallBlastingSubService.standard.value:
-            if self.audioDuration is None and not self.audioPath:
-                raise ValueError("AUDIO_SOURCE_REQUIRED: audioDuration or audioPath is required for standard sub-service.")
+            if not self.audioPath:
+                raise ValueError("AUDIO_PATH_REQUIRED: audioPath is required for call_blasting standard sub-service.")
+        if self.subService == CallBlastingSubService.custom.value:
+            if not self.content or not self.content.strip():
+                raise ValueError("CONTENT_REQUIRED: content is required for call_blasting custom sub-service.")
         return self
 
 
@@ -133,6 +137,8 @@ class SmsDataProcessingDTO(DataProcessingDTO):
 
     @model_validator(mode="after")
     def validate_shortname(self) -> "SmsDataProcessingDTO":
+        if not self.content or not self.content.strip():
+            raise ValueError("CONTENT_REQUIRED: content is required for SMS.")
         if not self.rulesCountry.useShortName:
             return self
         if not self.shortname or not self.shortname.strip():

@@ -7,6 +7,13 @@ ServiceKey = Literal["sms", "email"]          # para get_tariff_costs (SMS / ema
 CBServiceKey = Literal["standard", "custom"]  # para get_tariff_costs_cb (call blasting)
 
 
+def _decimal_to_float(v) -> float:
+    # SQLAlchemy retorna columnas DECIMAL de MySQL como objetos Decimal de Python.
+    # Polars no tiene tipo nativo para Decimal y lo infiere como Object dtype,
+    # el cual no puede escribirse en Parquet. Convertir a float resuelve el problema.
+    return float(v)
+
+
 class CostRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -39,7 +46,10 @@ class CostRepository:
 
         result = await self.session.execute(stmt)
         rows = result.all()
-        return sorted(rows, key=lambda x: len(x[0]), reverse=True)
+        return [
+            (str(r[0]), _decimal_to_float(r[1]), str(r[2]))
+            for r in sorted(rows, key=lambda x: len(x[0]), reverse=True)
+        ]
 
     async def get_email_cost(
         self,
@@ -89,4 +99,7 @@ class CostRepository:
 
         result = await self.session.execute(stmt)
         rows = result.all()
-        return sorted(rows, key=lambda x: len(x[0]), reverse=True)
+        return [
+            (str(r[0]), _decimal_to_float(r[1]), str(r[2]), _decimal_to_float(r[3]), _decimal_to_float(r[4]))
+            for r in sorted(rows, key=lambda x: len(x[0]), reverse=True)
+        ]

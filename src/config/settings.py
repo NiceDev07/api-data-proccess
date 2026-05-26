@@ -1,36 +1,36 @@
 from pathlib import Path
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from enum import Enum
+from pydantic import Field
+from pydantic import ConfigDict
+from pydantic_settings import BaseSettings
 
 _ENV_FILE = Path(__file__).parent.parent.parent / ".env"
 
-class EnvironmentEnum(Enum):
-        dev = "dev"
-        prod = "prod"
 
 class Settings(BaseSettings):
-    PREFIX_APP: str = "/v2"
-    ENV: EnvironmentEnum = EnvironmentEnum.dev.value
-    PORT: int = 8000
-    HOST: str = "0.0.0.0"
-    REPOSITORY_FILES_DIR: str = "/"
-    OUTPUT_DIR: str = "resultados"
+    prefix_app: str       = Field("/v2",        alias="PREFIX_APP")
+    env:        str       = Field("dev",        alias="ENV")
+    port:       int       = Field(8000,         alias="PORT")
+    host:       str       = Field("0.0.0.0",    alias="HOST")
 
-    DB_SAEM3: str = "mysql+mysqlconnector://user:pass@host:port/database"
-    DB_PORTABILIDAD: str = "mysql+mysqlconnector://user:pass@host:port/database"
-    DB_MASIVOS_SMS: str = "mysql+mysqlconnector://user:pass@host:port/database"
-    DB_TELEFONOS_CAMPANAS: str = "mysql+mysqlconnector://user:pass@host:port/database"
-    DB_EMAIL: str = "mysql+mysqlconnector://user:pass@host:port/database"
-    DB_CALLB: str = "postgresql+asyncpg://user:pass@host:port/database"
-    REDIS_URL: str = "redis://localhost:6379/0"
+    repository_files_dir: str = Field("/", alias="REPOSITORY_FILES_DIR")
 
-    # Límite máximo de registros por campaña para usuarios de nivel > 1.
-    # Configurable por entorno; soporta hasta 1M+ ajustando este valor.
-    MAX_CAMPAIGN_RECORDS: int = 700_000
+    db_saem3:             str = Field(..., alias="DB_SAEM3")
+    db_portabilidad:      str = Field(..., alias="DB_PORTABILIDAD")
+    db_masivos_sms:       str = Field(..., alias="DB_MASIVOS_SMS")
+    db_telefonos_campanas: str = Field(..., alias="DB_TELEFONOS_CAMPANAS")
+    db_email:             str = Field(..., alias="DB_EMAIL")
+    db_callb:             str = Field(..., alias="DB_CALLB")
 
-    model_config = SettingsConfigDict(
+    redis_url: str = Field("redis://localhost:6379/0", alias="REDIS_URL")
+
+    max_campaign_records: int = Field(700_000, alias="MAX_CAMPAIGN_RECORDS")
+
+    model_config = ConfigDict(
         env_file=str(_ENV_FILE),
-        extra="ignore"
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
     )
+
 
 settings = Settings()
