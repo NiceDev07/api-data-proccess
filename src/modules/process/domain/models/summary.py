@@ -38,14 +38,14 @@ class CampaignSummary(BaseModel):
 class CBSummaryGroup(BaseModel):
     operator: str
     total: int
-    seconds: int
+    seconds: float
     credits: float
     unit_value: float
 
 
 class CBSummaryGeneral(BaseModel):
     total_records: int
-    total_seconds: int
+    total_seconds: float
     total_credits: float
     total_excluded: int
 

@@ -736,32 +736,32 @@ class TestCalculateDurationCustom:
     _pipe = CalculateDurationCustom()
 
     async def test_duration_per_record(self):
-        # Fórmula: ceil(words / 170 * 60 + 7)
-        # 85 words  → ceil(30 + 7)  = ceil(37)  = 37
-        # 170 words → ceil(60 + 7)  = ceil(67)  = 67
+        # Fórmula: words / 170 * 60 + 7  (sin ceil — valor exacto con round(3))
+        # 85 words  → 85/170*60 + 7 = 30 + 7 = 37.0
+        # 170 words → 170/170*60 + 7 = 60 + 7 = 67.0
         words_85  = " ".join(["hola"] * 85)
         words_170 = " ".join(["test"] * 170)
         df = pl.DataFrame(
             {Cols.message: [words_85, words_170], Cols.is_ok: [True, True]},
         )
         result = await self._pipe.execute(df, make_ctx())
-        assert result[Cols.seconds][0] == 37   # <-- CAMBIAR a 35 para forzar fallo
-        assert result[Cols.seconds][1] == 67   # <-- CAMBIAR a 65 para forzar fallo
+        assert result[Cols.seconds][0] == pytest.approx(37.0)   # <-- CAMBIAR a 35 para forzar fallo
+        assert result[Cols.seconds][1] == pytest.approx(67.0)   # <-- CAMBIAR a 65 para forzar fallo
 
     async def test_single_word_gets_minimum_plus_margin(self):
         df = pl.DataFrame({Cols.message: ["hola"], Cols.is_ok: [True]})
         result = await self._pipe.execute(df, make_ctx())
-        # ceil(1/170*60 + 7) = ceil(0.35 + 7) = ceil(7.35) = 8
-        assert result[Cols.seconds][0] == 8    # <-- CAMBIAR a 6 para forzar fallo
+        # 1/170*60 + 7 = 0.353 + 7 = 7.353
+        assert result[Cols.seconds][0] == pytest.approx(7.353, abs=1e-2)  # <-- CAMBIAR a 8 para forzar fallo
 
     async def test_compact_text_fallback(self):
         """Texto largo sin espacios: fallback len//5 para estimar palabras."""
         # 1 palabra detectada pero 110 caracteres → fallback: max(1, 110//5) = 22 palabras
-        # ceil(22/170*60 + 7) = ceil(7.76 + 7) = ceil(14.76) = 15
+        # 22/170*60 + 7 = 7.765 + 7 = 14.765
         compact = "a" * 110
         df = pl.DataFrame({Cols.message: [compact], Cols.is_ok: [True]})
         result = await self._pipe.execute(df, make_ctx())
-        assert result[Cols.seconds][0] == 15   # <-- CAMBIAR a 8 para forzar fallo
+        assert result[Cols.seconds][0] == pytest.approx(14.765, abs=1e-2)  # <-- CAMBIAR a 15 para forzar fallo
 
     async def test_excludes_tmp_columns(self):
         df = pl.DataFrame({Cols.message: ["uno dos tres"], Cols.is_ok: [True]})
