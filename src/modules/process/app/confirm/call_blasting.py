@@ -27,6 +27,8 @@ class CallBlastingConfirmStrategy(BaseConfirmStrategy):
         self._repo = repo
 
     async def _do_confirm(self, path: Path, campaign_ids: list[int]) -> dict[str, Any]:
+        # Solo se insertan registros válidos (is_ok=True): la tabla de CB es la lista
+        # operativa de llamadas a ejecutar. Los excluidos quedan auditados en el Parquet.
         lf = pl.scan_parquet(path).filter(pl.col(Cols.is_ok))
         lf = self._map_columns(lf)
         df = lf.collect()
