@@ -65,7 +65,12 @@ class SmsProcessor(IDataProcessor):
             payload.campaignId, df.height,
         )
         for step in self.steps:
-            df = await step.execute(df, payload)
+            try:
+                df = await step.execute(df, payload)
+            except Exception as exc:
+                step_name = type(step).__name__
+                logger.error("SMS | error en paso %s: %s", step_name, exc)
+                raise
 
         summary = self._build_summary(df)
         sg = summary.summaryGeneral
@@ -110,8 +115,9 @@ class SmsProcessor(IDataProcessor):
                 pl.col(Cols.credits).filter(pl.col(Cols.is_ok)).sum().round(3).alias("credits"),
             )
             .with_columns(
-                # unit_value: promedio real de créditos por registro válido del grupo
-                (pl.col("credits") / pl.col("total")).round(3).alias("unit_value")
+                # unit_value: promedio real de créditos por registro válido del grupo.
+                # fill_nan(0) cubre el caso donde total=0 (todos excluidos en el grupo).
+                (pl.col("credits") / pl.col("total")).fill_nan(0.0).round(3).alias("unit_value")
             )
             .sort("credits", descending=True)
         )
