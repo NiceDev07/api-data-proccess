@@ -8,35 +8,49 @@ from modules.process.domain.interfaces.file_reader import IFileReader
 from modules.process.domain.models.process_dto import BaseFileConfig
 from modules.process.domain.utils import normalize_columns
 
-_UTF16_BOMS = (b"\xff\xfe", b"\xfe\xff")
+_DETECTION_SAMPLE = 256 * 1024
+_RESIDUAL_BOM_CHARS = ("﻿", "þÿ", "ÿþ")
+# cp1250 y cp1252 comparten bytes; en empate preferimos cp1252 (Latinoamérica).
+_CHAOS_TIE_THRESHOLD = 0.01
+
+
+def _resolve_encoding(sample: bytes) -> str | None:
+    result = from_bytes(sample)
+    best = result.best()
+    if best is None:
+        return None
+    if best.encoding == "cp1252":
+        return "cp1252"
+    for c in result:
+        if c.encoding == "cp1252" and abs(c.chaos - best.chaos) < _CHAOS_TIE_THRESHOLD:
+            return "cp1252"
+    return best.encoding
 
 
 def _to_utf8(file_path: str) -> io.BytesIO | str:
     """
-    Convierte el archivo a UTF-8 en memoria cuando su encoding no es UTF-8/ASCII.
-    - UTF-16 (con BOM): decodifica con 'utf-16'.
-    - UTF-8 BOM: quita el BOM para que no contamine el primer nombre de columna.
-    - Otros (ISO-8859-6, KOI8-U, Windows-1256, OEM-720, …): charset-normalizer
-      detecta el encoding y lo convierte; preserva el contenido correctamente.
-    Para UTF-8 y ASCII puro devuelve la ruta original (sin copiar en memoria).
+    Devuelve la ruta cuando es UTF-8 sin BOM (Polars lee directo de disco).
+    En cualquier otro encoding devuelve un BytesIO ya convertido a UTF-8.
     """
+    with open(file_path, "rb") as f:
+        sample = f.read(_DETECTION_SAMPLE)
+
+    has_utf8_bom = sample.startswith(b"\xef\xbb\xbf")
+    detected = _resolve_encoding(sample)
+
+    if not has_utf8_bom and detected in (None, "utf_8"):
+        return file_path
+
     with open(file_path, "rb") as f:
         raw = f.read()
 
-    if raw[:2] in _UTF16_BOMS:
-        return io.BytesIO(raw.decode("utf-16").encode("utf-8"))
-
-    if raw[:3] == b"\xef\xbb\xbf":
-        return io.BytesIO(raw[3:])  # ya es UTF-8, solo eliminamos el BOM
-
-    result = from_bytes(raw)
-    best = result.best()
-    if best is None:
-        return file_path
-    enc = best.encoding.lower().replace("-", "_")
-    if enc in ("utf_8", "ascii"):
-        return file_path
-    return io.BytesIO(raw.decode(best.encoding, errors="replace").encode("utf-8"))
+    encoding = "utf-8-sig" if has_utf8_bom else detected
+    text = raw.decode(encoding, errors="replace")
+    for residual in _RESIDUAL_BOM_CHARS:
+        if text.startswith(residual):
+            text = text[len(residual):]
+            break
+    return io.BytesIO(text.encode("utf-8"))
 
 
 class CsvReader(IFileReader):
@@ -50,7 +64,7 @@ class CsvReader(IFileReader):
             source = _to_utf8(file_path)
             is_bytes = isinstance(source, io.BytesIO)
 
-            kwargs = dict(
+            kwargs: dict = dict(
                 separator=config.delimiter,
                 encoding="utf8-lossy",
                 quote_char='"',
@@ -58,20 +72,20 @@ class CsvReader(IFileReader):
                 infer_schema_length=1000,
                 ignore_errors=False,
             )
-            # n_rows solo aplica sobre rutas de archivo, no sobre BytesIO
             if not is_bytes and config.n_rows is not None:
-                kwargs["n_rows"] = config.n_rows  # type: ignore[assignment]
+                kwargs["n_rows"] = config.n_rows
+
+            def _read(extra: dict | None = None) -> pl.LazyFrame:
+                if is_bytes:
+                    source.seek(0)
+                return pl.read_csv(source, **{**kwargs, **(extra or {})}).lazy()
 
             try:
-                if is_bytes:
-                    source.seek(0)  # type: ignore[union-attr]
-                lf = pl.read_csv(source, **kwargs).lazy()
+                lf = _read()
             except Exception:
-                # Fallback para archivos con números en formato regional
-                # (ej. "2.655.000" con puntos como separadores de miles).
-                if is_bytes:
-                    source.seek(0)  # type: ignore[union-attr]
-                lf = pl.read_csv(source, **{**kwargs, "infer_schema": False}).lazy()
+                # Números con separadores regionales (ej. "2.655.000") rompen
+                # la inferencia Float64; reintentamos leyendo todo como string.
+                lf = _read({"infer_schema": False})
 
             if is_bytes and config.n_rows is not None:
                 lf = lf.head(config.n_rows)
@@ -80,7 +94,6 @@ class CsvReader(IFileReader):
         try:
             lf = await asyncio.to_thread(_load)
             lf = lf.rename(normalize_columns(list(lf.collect_schema())))
-            # Elimina filas donde todas las columnas son nulas (líneas en blanco del CSV)
             return lf.filter(pl.any_horizontal(pl.all().is_not_null()))
         except FileNotFoundError:
             raise FileNotFoundError("FILE_NOT_FOUND: Campaign file not found.")
