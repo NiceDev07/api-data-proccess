@@ -1,10 +1,42 @@
 import asyncio
+import io
 
 import polars as pl
+from charset_normalizer import from_bytes
 
 from modules.process.domain.interfaces.file_reader import IFileReader
 from modules.process.domain.models.process_dto import BaseFileConfig
 from modules.process.domain.utils import normalize_columns
+
+_UTF16_BOMS = (b"\xff\xfe", b"\xfe\xff")
+
+
+def _to_utf8(file_path: str) -> io.BytesIO | str:
+    """
+    Convierte el archivo a UTF-8 en memoria cuando su encoding no es UTF-8/ASCII.
+    - UTF-16 (con BOM): decodifica con 'utf-16'.
+    - UTF-8 BOM: quita el BOM para que no contamine el primer nombre de columna.
+    - Otros (ISO-8859-6, KOI8-U, Windows-1256, OEM-720, …): charset-normalizer
+      detecta el encoding y lo convierte; preserva el contenido correctamente.
+    Para UTF-8 y ASCII puro devuelve la ruta original (sin copiar en memoria).
+    """
+    with open(file_path, "rb") as f:
+        raw = f.read()
+
+    if raw[:2] in _UTF16_BOMS:
+        return io.BytesIO(raw.decode("utf-16").encode("utf-8"))
+
+    if raw[:3] == b"\xef\xbb\xbf":
+        return io.BytesIO(raw[3:])  # ya es UTF-8, solo eliminamos el BOM
+
+    result = from_bytes(raw)
+    best = result.best()
+    if best is None:
+        return file_path
+    enc = best.encoding.lower().replace("-", "_")
+    if enc in ("utf_8", "ascii"):
+        return file_path
+    return io.BytesIO(raw.decode(best.encoding, errors="replace").encode("utf-8"))
 
 
 class CsvReader(IFileReader):
@@ -15,10 +47,9 @@ class CsvReader(IFileReader):
         file_path = config.folder
 
         def _load() -> pl.LazyFrame:
-            # read_csv + .lazy(): carga el archivo una vez y envuelve en plan lazy
-            # para que toda la cadena de pasos se materialice una sola vez al final.
-            # n_rows: cuando viene (ej. preview), Polars para de leer a nivel de I/O —
-            # más eficiente que leer el archivo completo y luego aplicar .limit().
+            source = _to_utf8(file_path)
+            is_bytes = isinstance(source, io.BytesIO)
+
             kwargs = dict(
                 separator=config.delimiter,
                 encoding="utf8-lossy",
@@ -26,14 +57,25 @@ class CsvReader(IFileReader):
                 has_header=config.useHeaders,
                 infer_schema_length=1000,
                 ignore_errors=False,
-                **({"n_rows": config.n_rows} if config.n_rows is not None else {}),
             )
+            # n_rows solo aplica sobre rutas de archivo, no sobre BytesIO
+            if not is_bytes and config.n_rows is not None:
+                kwargs["n_rows"] = config.n_rows  # type: ignore[assignment]
+
             try:
-                return pl.read_csv(file_path, **kwargs).lazy()
+                if is_bytes:
+                    source.seek(0)  # type: ignore[union-attr]
+                lf = pl.read_csv(source, **kwargs).lazy()
             except Exception:
                 # Fallback para archivos con números en formato regional
                 # (ej. "2.655.000" con puntos como separadores de miles).
-                return pl.read_csv(file_path, **{**kwargs, "infer_schema": False}).lazy()
+                if is_bytes:
+                    source.seek(0)  # type: ignore[union-attr]
+                lf = pl.read_csv(source, **{**kwargs, "infer_schema": False}).lazy()
+
+            if is_bytes and config.n_rows is not None:
+                lf = lf.head(config.n_rows)
+            return lf
 
         try:
             lf = await asyncio.to_thread(_load)
