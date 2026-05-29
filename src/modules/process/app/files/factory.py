@@ -9,21 +9,21 @@ from modules.process.app.files.null_reader import NullReader
 class ReaderFileFactory:
     def __init__(self):
         self._map = {
-            FileType.csv: CsvReader(),
-            FileType.xlsx: XlsxReader(),
+            FileType.csv: CsvReader,
+            FileType.xlsx: XlsxReader,
         }
 
     def _get_extension(self, file_name: str) -> str:
         _, ext = os.path.splitext(file_name.lower())
         return ext.replace(".", "")
 
-    def create(self, file: str) -> IFileReader:
+    def create(self, file: str, *, preview: bool = False) -> IFileReader:
+        # preview=True: configura el reader para el endpoint /v2/first-rows —
+        # valores como string (sin inferencia) y encabezados originales.
         if file is None:
             return NullReader()
-
-        ext = self._get_extension(file)
-        cls = self._map.get(ext)
+        cls = self._map.get(self._get_extension(file))
         if not cls:
             # Extensión no soportada — el error lo captura la ruta y devuelve 404
             raise FileNotFoundError("FILE_NOT_FOUND: Campaign file not found.")
-        return cls
+        return cls(preview_mode=preview)
