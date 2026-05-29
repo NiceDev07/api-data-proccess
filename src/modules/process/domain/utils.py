@@ -8,7 +8,7 @@ _POLARS_AUTO_NAME_RE = re.compile(r"^(_duplicated_\d+|__UNNAMED__\d+)$")
 
 
 def normalize_col_name(name: str) -> str:
-    """Sin acentos, sin ñ, minúsculas, sin espacios."""
+    # Estandariza el nombre para comparación interna: sin acentos, minúsculas, sin espacios.
     nfd = unicodedata.normalize("NFD", name)
     without_accents = "".join(c for c in nfd if unicodedata.category(c) != "Mn")
     return "".join(c for c in without_accents.lower() if not c.isspace())
@@ -26,3 +26,14 @@ def normalize_columns(columns: list[str]) -> dict[str, str]:
         else:
             result[col] = normalized
     return result
+
+
+def rename_unnamed_columns(columns: list[str]) -> dict[str, str]:
+    # Solo renombra encabezados vacíos o auto-generados a column_{posición}.
+    # Preserva los demás tal cual están (mayúsculas, acentos, espacios) — útil
+    # para el preview donde se quiere mostrar los headers originales.
+    return {
+        col: f"column_{i + 1}"
+        for i, col in enumerate(columns)
+        if not col.strip() or _POLARS_AUTO_NAME_RE.match(col)
+    }

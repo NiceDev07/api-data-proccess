@@ -6,7 +6,7 @@ from charset_normalizer import from_bytes
 
 from modules.process.domain.interfaces.file_reader import IFileReader
 from modules.process.domain.models.process_dto import BaseFileConfig
-from modules.process.domain.utils import normalize_columns
+from modules.process.domain.utils import normalize_columns, rename_unnamed_columns
 
 _DETECTION_SAMPLE = 256 * 1024
 _RESIDUAL_BOM_CHARS = ("﻿", "þÿ", "ÿþ")
@@ -28,10 +28,8 @@ def _resolve_encoding(sample: bytes) -> str | None:
 
 
 def _to_utf8(file_path: str) -> io.BytesIO | str:
-    """
-    Devuelve la ruta cuando es UTF-8 sin BOM (Polars lee directo de disco).
-    En cualquier otro encoding devuelve un BytesIO ya convertido a UTF-8.
-    """
+    # Si el archivo ya es UTF-8 puro, devuelve la ruta para que Polars lea de disco sin copia.
+    # Cualquier otro encoding se convierte en memoria y se devuelve como BytesIO.
     with open(file_path, "rb") as f:
         sample = f.read(_DETECTION_SAMPLE)
 
@@ -54,6 +52,11 @@ def _to_utf8(file_path: str) -> io.BytesIO | str:
 
 
 class CsvReader(IFileReader):
+    def __init__(self, *, preview_mode: bool = False) -> None:
+        # preview_mode=True: no infiere tipos (todo como string) y preserva
+        # los encabezados originales — solo renombra los vacíos a column_N.
+        self.preview_mode = preview_mode
+
     async def read(self, config: BaseFileConfig) -> pl.LazyFrame:
         if config is None:
             raise ValueError("CsvReader.read() recibió config=None")
@@ -69,9 +72,16 @@ class CsvReader(IFileReader):
                 encoding="utf8-lossy",
                 quote_char='"',
                 has_header=config.useHeaders,
-                infer_schema_length=1000,
                 ignore_errors=False,
             )
+            if self.preview_mode:
+                # Sin inferencia: todo llega como String para que el frontend vea
+                # "5727242" en lugar de "5727242.0".
+                kwargs["infer_schema"] = False
+            else:
+                # Inferir tipos con las primeras 1000 filas es suficiente y evita
+                # leer el archivo entero solo para detectar el schema.
+                kwargs["infer_schema_length"] = 1000
             if not is_bytes and config.n_rows is not None:
                 kwargs["n_rows"] = config.n_rows
 
@@ -93,7 +103,10 @@ class CsvReader(IFileReader):
 
         try:
             lf = await asyncio.to_thread(_load)
-            lf = lf.rename(normalize_columns(list(lf.collect_schema())))
+            cols = list(lf.collect_schema())
+            rename = rename_unnamed_columns(cols) if self.preview_mode else normalize_columns(cols)
+            if rename:
+                lf = lf.rename(rename)
             return lf.filter(pl.any_horizontal(pl.all().is_not_null()))
         except FileNotFoundError:
             raise FileNotFoundError("FILE_NOT_FOUND: Campaign file not found.")
