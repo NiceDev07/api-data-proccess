@@ -110,8 +110,12 @@ class EmailProcessor(IDataProcessor):
             .agg(
                 pl.col(Cols.is_ok).sum().alias("total"),
                 (~pl.col(Cols.is_ok)).sum().alias("total_excluded"),
-                pl.col(Cols.cost).first().round(3).alias("unit_value"),
                 pl.col(Cols.credits).filter(pl.col(Cols.is_ok)).sum().round(3).alias("credits"),
+            )
+            .with_columns(
+                # unit_value: promedio real de créditos por registro válido del grupo.
+                # fill_nan(0) cubre el caso donde total=0 (todos excluidos en el grupo).
+                (pl.col("credits") / pl.col("total")).fill_nan(0.0).round(3).alias("unit_value")
             )
             .sort("credits", descending=True)
         )

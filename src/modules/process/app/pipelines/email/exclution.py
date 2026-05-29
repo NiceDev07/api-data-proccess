@@ -15,7 +15,7 @@ class ExclutionEmail(IPipeline):
         self.exclusion_source = exclusion_source
         self.normalizer = normalizer
 
-    async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
+    async def execute(self, df: pl.DataFrame | pl.LazyFrame, ctx: DataProcessingDTO) -> pl.DataFrame | pl.LazyFrame:
         if not ctx.useExclusionList or ctx.configListExclusion is None:
             logger.debug("ExclutionEmail | lista de exclusión desactivada — todos los registros marcados OK")
             return df.with_columns(

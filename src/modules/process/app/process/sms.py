@@ -65,7 +65,12 @@ class SmsProcessor(IDataProcessor):
             payload.campaignId, df.height,
         )
         for step in self.steps:
-            df = await step.execute(df, payload)
+            try:
+                df = await step.execute(df, payload)
+            except Exception as exc:
+                step_name = type(step).__name__
+                logger.error("SMS | error en paso %s: %s", step_name, exc)
+                raise
 
         summary = self._build_summary(df)
         sg = summary.summaryGeneral
@@ -99,6 +104,7 @@ class SmsProcessor(IDataProcessor):
 
     def _build_summary(self, df: pl.DataFrame) -> CampaignSummary:
         valid = df.filter(pl.col(Cols.is_ok))
+        excluded = df.filter(~pl.col(Cols.is_ok))
 
         group_df = (
             df.group_by(Cols.cost_operator)
@@ -107,7 +113,11 @@ class SmsProcessor(IDataProcessor):
                 (~pl.col(Cols.is_ok)).sum().alias("total_excluded"),
                 pl.col(Cols.pdu).filter(pl.col(Cols.is_ok)).sum().alias("pdu"),
                 pl.col(Cols.credits).filter(pl.col(Cols.is_ok)).sum().round(3).alias("credits"),
-                pl.col(Cols.cost).first().round(3).alias("unit_value"),
+            )
+            .with_columns(
+                # unit_value: promedio real de créditos por registro válido del grupo.
+                # fill_nan(0) cubre el caso donde total=0 (todos excluidos en el grupo).
+                (pl.col("credits") / pl.col("total")).fill_nan(0.0).round(3).alias("unit_value")
             )
             .sort("credits", descending=True)
         )
@@ -118,7 +128,7 @@ class SmsProcessor(IDataProcessor):
             pl.col(Cols.credits).sum().round(3).alias("total_credits"),
         ).row(0, named=True)
 
-        violations = self._build_violations(df)
+        violations = self._build_violations(excluded)
 
         return CampaignSummary(
             summaryGroup=[
@@ -127,14 +137,15 @@ class SmsProcessor(IDataProcessor):
             ],
             summaryGeneral=SummaryGeneral(
                 **general_row,
-                total_excluded=df.height - valid.height,
+                total_excluded=excluded.height,
             ),
             violations=violations,
         )
 
-    def _build_violations(self, df: pl.DataFrame) -> list[RegulationViolation]:
+    def _build_violations(self, excluded: pl.DataFrame) -> list[RegulationViolation]:
+        # Recibe solo los registros excluidos — evita filtrar el DF completo dos veces
         violations_df = (
-            df.filter(pl.col(Cols.error_code).is_in(list(_ERROR_DESCRIPTIONS)))
+            excluded.filter(pl.col(Cols.error_code).is_in(list(_ERROR_DESCRIPTIONS)))
             .group_by(Cols.error_code)
             .agg(pl.len().alias("affected"))
         )

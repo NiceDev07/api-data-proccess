@@ -328,3 +328,87 @@ def test_sms_subservice_invalid_rejected():
         base["subService"] = valor
         with pytest.raises(ValidationError):
             SmsDataProcessingDTO.model_validate(base)
+
+
+# ---------------------------------------------------------------------------
+# Edge cases
+# ---------------------------------------------------------------------------
+
+@pytest.mark.anyio
+async def test_sms_flow_all_excluded_returns_success_false():
+    """Cuando todos los registros son excluidos, success=False y el Parquet se guarda igual."""
+    scenario = "sms_flow/all_excluded"
+    storage = AnalysisStorage(scenario)
+    processor = SmsProcessor(
+        # Rangos que no cubren ningún número del archivo → todos quedan sin operador
+        numeration_service=numeration_mock(starts=[9000000000], ends=[9099999999], operators=["NONE"]),
+        exclusion_source=exclusion_mock(col="number"),
+        cost_service=cost_mock(),
+        storage=storage,
+    )
+
+    payload = make_payload()
+    df = await read_df(payload)
+    result = await processor.process(df, payload)
+    save_summary(scenario, result)
+
+    assert result["success"] is False
+    assert result["error"]["code"] == "NO_VALID_RECORDS"
+    assert result["summaryGeneral"]["total_records"] == 0
+    assert result["summaryGeneral"]["total_excluded"] == 2
+
+    # El Parquet se guarda aunque todos sean excluidos — la auditoría queda intacta
+    assert len(storage.saved_dfs) == 1
+    saved = storage.last_df()
+    assert len(saved) == 2
+    assert not saved[Cols.is_ok].any()
+    assert (saved[Cols.error_code] == ExclusionReason.NO_OPERATOR).all()
+
+
+@pytest.mark.anyio
+async def test_sms_flow_zero_cost_produces_zero_credits():
+    """Cost=0 produce credits=0 y unit_value=0 sin errores."""
+    scenario = "sms_flow/zero_cost"
+    storage = AnalysisStorage(scenario)
+    processor = SmsProcessor(
+        numeration_service=numeration_mock(),
+        exclusion_source=exclusion_mock(col="number"),
+        cost_service=cost_mock(costs=[("57", 0.0, "COLOMBIA")]),
+        storage=storage,
+    )
+
+    payload = make_payload()
+    df = await read_df(payload)
+    result = await processor.process(df, payload)
+    save_summary(scenario, result)
+
+    assert result["success"] is True
+    assert result["summaryGeneral"]["total_credits"] == 0.0
+    group = result["summaryGroup"][0]
+    assert group["credits"] == 0.0
+    assert group["unit_value"] == 0.0
+
+
+@pytest.mark.anyio
+async def test_sms_flow_unit_value_zero_when_group_all_excluded():
+    """unit_value=0 cuando todos los registros de un operador están excluidos (no NaN)."""
+    scenario = "sms_flow/unit_value_zero_excluded"
+    storage = AnalysisStorage(scenario)
+    processor = SmsProcessor(
+        # Solo CLARO cubre el primer número; el segundo queda sin operador
+        numeration_service=numeration_mock(
+            starts=[3000000000], ends=[3009999999], operators=["CLARO"]
+        ),
+        exclusion_source=exclusion_mock(col="number"),
+        cost_service=cost_mock(costs=[("57", 0.5, "COLOMBIA")]),
+        storage=storage,
+    )
+
+    payload = make_payload()
+    df = await read_df(payload)
+    result = await processor.process(df, payload)
+
+    for group in result["summaryGroup"]:
+        uv = group["unit_value"]
+        assert uv is not None, f"unit_value no debe ser None en grupo {group['operator']}"
+        assert not (uv != uv), f"unit_value no debe ser NaN en grupo {group['operator']}"  # NaN check

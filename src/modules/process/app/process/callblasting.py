@@ -88,7 +88,12 @@ class CallBlastingProcessor(IDataProcessor):
             payload.subService, payload.campaignId, df.height,
         )
         for step in steps:
-            df = await step.execute(df, payload)
+            try:
+                df = await step.execute(df, payload)
+            except Exception as exc:
+                step_name = type(step).__name__
+                logger.error("CallBlasting [%s] | error en paso %s: %s", payload.subService, step_name, exc)
+                raise
 
         summary = self._build_summary(df)
         sg = summary.summaryGeneral
