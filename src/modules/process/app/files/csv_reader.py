@@ -36,7 +36,7 @@ def _to_utf8(file_path: str) -> io.BytesIO | str:
     has_utf8_bom = sample.startswith(b"\xef\xbb\xbf")
     detected = _resolve_encoding(sample)
 
-    if not has_utf8_bom and detected in (None, "utf_8"):
+    if not has_utf8_bom and detected in (None, "utf_8", "ascii"):
         return file_path
 
     with open(file_path, "rb") as f:
