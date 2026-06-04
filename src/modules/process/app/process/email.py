@@ -6,7 +6,7 @@ from modules.process.domain.models.process_dto import DataProcessingDTO
 from modules.process.domain.models.summary import EmailCampaignSummary, EmailSummaryGeneral, EmailSummaryGroup
 from modules.process.domain.constants.cols import Cols
 from modules.process.app.normalizers.email import EmailNormalizer
-from modules.process.app.helpers import attach_identifier
+from modules.process.app.helpers import attach_identifier, build_no_valid_records_response
 from modules.process.app.pipelines import (
     CustomMessage, SaveResults,
     CustomSubject, AssignCostEmail, CalculateCreditsEmail,
@@ -84,6 +84,13 @@ class EmailProcessor(IDataProcessor):
 
         summary = self._build_summary(df)
         sg = summary.summaryGeneral
+
+        if sg.total_records == 0:
+            return build_no_valid_records_response(
+                df=df, summary_dump=summary.model_dump(),
+                service="Email", payload=payload, total_excluded=sg.total_excluded,
+            )
+
         logger.info(
             "Email completado | válidos: %d | excluidos: %d | créditos: %g",
             sg.total_records, sg.total_excluded, sg.total_credits,

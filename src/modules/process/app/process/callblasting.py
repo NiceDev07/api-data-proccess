@@ -9,7 +9,7 @@ from modules.process.domain.models.process_dto import DataProcessingDTO
 from modules.process.domain.models.summary import CBCampaignSummary, CBSummaryGeneral, CBSummaryGroup
 from modules.process.domain.constants.cols import Cols
 from modules.process.domain.enums.sub_services import CallBlastingSubService
-from modules.process.app.helpers import attach_identifier
+from modules.process.app.helpers import attach_identifier, build_no_valid_records_response
 from modules.process.app.normalizers.number import NumberNormalizer
 from modules.process.app.pipelines import (
     CleanData, Exclution, ValidatePhoneLength, AssignOperator, ConcatPrefix,
@@ -97,6 +97,14 @@ class CallBlastingProcessor(IDataProcessor):
 
         summary = self._build_summary(df)
         sg = summary.summaryGeneral
+
+        if sg.total_records == 0:
+            return build_no_valid_records_response(
+                df=df, summary_dump=summary.model_dump(),
+                service=f"CallBlasting [{payload.subService}]",
+                payload=payload, total_excluded=sg.total_excluded,
+            )
+
         logger.info(
             "CallBlasting completado | válidos: %d | excluidos: %d | segundos: %d | créditos: %g",
             sg.total_records, sg.total_excluded, sg.total_seconds, sg.total_credits,

@@ -33,8 +33,11 @@ class AssignOperator(IPipeline):
 
         # Solo se invalida el registro si aún está OK — no se sobreescribe un error_code previo.
         to_invalidate = ~pl.Series(valid) & pl.col(Cols.is_ok)
+        # dtype=pl.String evita que Polars infiera Object cuando el array de numpy llega
+        # con dtype=object (desde NumerationService) o está vacío (todos filtrados antes).
+        # Object rompe la escritura a Parquet en SaveResults.
         return df.with_columns(
-            pl.Series(Cols.number_operator, assigned_ops),
+            pl.Series(Cols.number_operator, assigned_ops, dtype=pl.String),
             pl.when(to_invalidate)
             .then(pl.lit(False))
             .otherwise(pl.col(Cols.is_ok))

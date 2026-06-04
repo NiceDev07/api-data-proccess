@@ -7,7 +7,7 @@ from modules.process.app.pipelines import (
     CleanData, ConcatPrefix, AssignOperator, AssignCost, CalculateCredits,
     CalculatePDU, CustomMessage, Exclution, Landing, SaveResults, ValidateRegulations,
 )
-from modules.process.app.helpers import attach_identifier
+from modules.process.app.helpers import attach_identifier, build_no_valid_records_response
 from modules.process.app.normalizers.number import NumberNormalizer
 from modules.process.app.regulations.sms import SMS_REGULATIONS
 from modules.process.domain.interfaces.storage import IStorage
@@ -76,25 +76,10 @@ class SmsProcessor(IDataProcessor):
         sg = summary.summaryGeneral
 
         if sg.total_records == 0:
-            # Todos los registros fueron excluidos — agrupamos por código para el desglose
-            reasons = (
-                df.filter(pl.col(Cols.error_code).is_not_null())
-                .group_by(Cols.error_code)
-                .agg(pl.len().alias("affected"))
-                .to_dicts()
+            return build_no_valid_records_response(
+                df=df, summary_dump=summary.model_dump(),
+                service="SMS", payload=payload, total_excluded=sg.total_excluded,
             )
-            logger.error(
-                "SMS completado | válidos: 0 | excluidos: %d | campaña: %s",
-                sg.total_excluded, payload.campaignId,
-            )
-            return {
-                "success": False,
-                "error": {
-                    "code": "NO_VALID_RECORDS",
-                    "reasons": [{"code": r[Cols.error_code], "affected": r["affected"]} for r in reasons],
-                },
-                **summary.model_dump(),
-            }
 
         logger.info(
             "SMS completado | válidos: %d | excluidos: %d | créditos: %g | violaciones: %d",
