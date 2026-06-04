@@ -2,53 +2,48 @@ import asyncio
 import io
 
 import polars as pl
-from charset_normalizer import from_bytes
 
 from modules.process.domain.interfaces.file_reader import IFileReader
 from modules.process.domain.models.process_dto import BaseFileConfig
 from modules.process.domain.utils import normalize_columns, rename_unnamed_columns
 
-_DETECTION_SAMPLE = 256 * 1024
-_RESIDUAL_BOM_CHARS = ("﻿", "þÿ", "ÿþ")
-# cp1250 y cp1252 comparten bytes; en empate preferimos cp1252 (Latinoamérica).
-_CHAOS_TIE_THRESHOLD = 0.01
-
-
-def _resolve_encoding(sample: bytes) -> str | None:
-    result = from_bytes(sample)
-    best = result.best()
-    if best is None:
-        return None
-    if best.encoding == "cp1252":
-        return "cp1252"
-    for c in result:
-        if c.encoding == "cp1252" and abs(c.chaos - best.chaos) < _CHAOS_TIE_THRESHOLD:
-            return "cp1252"
-    return best.encoding
+# Encodings probados en orden — pensado para archivos reales de Latinoamérica.
+# latin1 es la red de seguridad final: acepta cualquier byte (0x00-0xFF),
+# por lo que nunca lanza UnicodeDecodeError.
+_ENCODINGS_TO_TRY = ("utf-8-sig", "utf-8", "cp1252", "latin1")
 
 
 def _to_utf8(file_path: str) -> io.BytesIO | str:
-    # Si el archivo ya es UTF-8 puro, devuelve la ruta para que Polars lea de disco sin copia.
-    # Cualquier otro encoding se convierte en memoria y se devuelve como BytesIO.
-    with open(file_path, "rb") as f:
-        sample = f.read(_DETECTION_SAMPLE)
-
-    has_utf8_bom = sample.startswith(b"\xef\xbb\xbf")
-    detected = _resolve_encoding(sample)
-
-    if not has_utf8_bom and detected in (None, "utf_8", "ascii"):
-        return file_path
-
+    # UTF-8 sin BOM: devolvemos la ruta para que Polars lea directo de disco (cero copia).
+    # UTF-16 con BOM: lo decodificamos aparte porque ninguno de los encodings de la lista lo cubre.
+    # Otros: probamos en orden y devolvemos BytesIO ya convertido a UTF-8.
     with open(file_path, "rb") as f:
         raw = f.read()
 
-    encoding = "utf-8-sig" if has_utf8_bom else detected
-    text = raw.decode(encoding, errors="replace")
-    for residual in _RESIDUAL_BOM_CHARS:
-        if text.startswith(residual):
-            text = text[len(residual):]
-            break
-    return io.BytesIO(text.encode("utf-8"))
+    # Mac clásico: solo "\r" como salto de línea. Polars no lo detecta y
+    # leería el archivo como una sola fila gigante — lo normalizamos a "\n".
+    needs_eol_fix = b"\r" in raw and b"\n" not in raw
+
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return io.BytesIO(raw.decode("utf-16").encode("utf-8"))
+
+    if not needs_eol_fix and not raw.startswith(b"\xef\xbb\xbf"):
+        try:
+            raw.decode("utf-8")
+            return file_path
+        except UnicodeDecodeError:
+            pass
+
+    if needs_eol_fix:
+        raw = raw.replace(b"\r", b"\n")
+
+    for encoding in _ENCODINGS_TO_TRY:
+        try:
+            return io.BytesIO(raw.decode(encoding).encode("utf-8"))
+        except UnicodeDecodeError:
+            continue
+    # Inalcanzable en la práctica: latin1 nunca falla.
+    return io.BytesIO(raw)
 
 
 class CsvReader(IFileReader):
@@ -93,9 +88,25 @@ class CsvReader(IFileReader):
             try:
                 lf = _read()
             except Exception:
-                # Números con separadores regionales (ej. "2.655.000") rompen
-                # la inferencia Float64; reintentamos leyendo todo como string.
-                lf = _read({"infer_schema": False})
+                try:
+                    # Números con separadores regionales (ej. "2.655.000") rompen
+                    # la inferencia Float64; reintentamos leyendo todo como string.
+                    lf = _read({"infer_schema": False})
+                except Exception:
+                    try:
+                        # CSV mal formado: filas con más columnas que el header.
+                        # truncate_ragged_lines=True descarta los campos extra en lugar de fallar.
+                        lf = _read({"infer_schema": False, "truncate_ragged_lines": True})
+                    except Exception:
+                        # Último recurso: comillas mal balanceadas o envolviendo la fila completa.
+                        # quote_char=None desactiva el manejo de quotes; ignore_errors saltea filas
+                        # que aún así no se puedan parsear.
+                        lf = _read({
+                            "infer_schema": False,
+                            "truncate_ragged_lines": True,
+                            "ignore_errors": True,
+                            "quote_char": None,
+                        })
 
             if is_bytes and config.n_rows is not None:
                 lf = lf.head(config.n_rows)
