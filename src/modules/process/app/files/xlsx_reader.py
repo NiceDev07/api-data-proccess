@@ -5,6 +5,9 @@ import polars as pl
 from modules.process.domain.interfaces.file_reader import IFileReader
 from modules.process.domain.models.process_dto import BaseFileConfig
 from modules.process.domain.utils import normalize_columns, rename_unnamed_columns
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class XlsxReader(IFileReader):
@@ -43,6 +46,8 @@ class XlsxReader(IFileReader):
             # Elimina filas donde todas las columnas son nulas (filas vacías de Excel)
             return lf.filter(pl.any_horizontal(pl.all().is_not_null()))
         except FileNotFoundError:
+            logger.debug("XLSX no encontrado | path=%s", file_path)
             raise FileNotFoundError("FILE_NOT_FOUND: Campaign file not found.")
-        except Exception:
+        except Exception as e:
+            logger.debug("XLSX error inesperado | path=%s | error=%s", file_path, e)
             raise ValueError("FILE_READ_ERROR: Error reading the campaign file.")

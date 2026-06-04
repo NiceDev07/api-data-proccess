@@ -6,6 +6,9 @@ import polars as pl
 from modules.process.domain.interfaces.file_reader import IFileReader
 from modules.process.domain.models.process_dto import BaseFileConfig
 from modules.process.domain.utils import normalize_columns, rename_unnamed_columns
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Encodings probados en orden — pensado para archivos reales de Latinoamérica.
 # latin1 es la red de seguridad final: acepta cualquier byte (0x00-0xFF),
@@ -120,8 +123,11 @@ class CsvReader(IFileReader):
                 lf = lf.rename(rename)
             return lf.filter(pl.any_horizontal(pl.all().is_not_null()))
         except FileNotFoundError:
+            logger.debug("CSV no encontrado | path=%s", file_path)
             raise FileNotFoundError("FILE_NOT_FOUND: Campaign file not found.")
-        except UnicodeDecodeError:
+        except UnicodeDecodeError as e:
+            logger.debug("CSV error de encoding | path=%s | error=%s", file_path, e)
             raise ValueError("FILE_READ_ERROR: Encoding error while reading the campaign file.")
-        except Exception:
+        except Exception as e:
+            logger.debug("CSV error inesperado | path=%s | error=%s", file_path, e)
             raise ValueError("FILE_READ_ERROR: Error reading the campaign file.")
