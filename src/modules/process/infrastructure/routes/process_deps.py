@@ -40,6 +40,7 @@ from modules.process.infrastructure.repositories.cost import CostRepository
 from modules.process.infrastructure.repositories.confirm.email import EmailConfirmRepository
 from modules.process.infrastructure.repositories.numeration import NumeracionRepository
 from modules.process.infrastructure.repositories.confirm.sms import SmsConfirmRepository
+from modules.process.infrastructure.errors import build_error_detail
 
 
 # ── dependencias compartidas ───────────────────────────────────────────────────
@@ -112,12 +113,19 @@ _DTO_BY_SERVICE = {
 }
 
 
-def _format_validation_error(exc: ValidationError) -> str:
-    # Extrae el primer error de Pydantic y lo formatea como "campo: mensaje"
+def _format_validation_error(exc: ValidationError) -> dict:
+    # Mapea los errores de Pydantic al formato {code, message} del proyecto.
+    # - validators custom: usan formato "Value error, CODE: msg" → se extrae el CODE.
+    # - campo required faltante: Pydantic da "Field required" sin código → MISSING_FIELD.
+    # - otros (tipo incorrecto, etc.): INVALID_FIELD con el mensaje original.
     error = exc.errors()[0]
-    msg = error["msg"].removeprefix("Value error, ")
-    field = error.get("loc", ())[-1] if error.get("loc") else None
-    return f"{field}: {msg}" if field else msg
+    msg = error["msg"]
+    if msg.startswith("Value error, "):
+        return build_error_detail(msg.removeprefix("Value error, "))
+    field = error.get("loc", ())[-1] if error.get("loc") else "unknown"
+    if error["type"] == "missing":
+        return {"code": "MISSING_FIELD", "message": f"Field '{field}' is required."}
+    return {"code": "INVALID_FIELD", "message": f"{field}: {msg}"}
 
 
 async def parse_payload(service: ServiceType, request: Request) -> DataProcessingDTO:
