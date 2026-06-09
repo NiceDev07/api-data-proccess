@@ -53,10 +53,12 @@ async def process_data(
         result = await use_case(service, payload)
         return JSONResponse(status_code=200, content=result)
     except FileNotFoundError as e:
-        logger.warning("Archivo no encontrado en processing [%s]: %s", service, e)
+        logger.warning("Archivo no encontrado en processing [%s] | path=%s | error=%s",
+                       service, payload.configFile.folder, e)
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
-        logger.warning("Error de validación en processing [%s]: %s", service, e)
+        logger.warning("Error de validación en processing [%s] | path=%s | error=%s",
+                       service, payload.configFile.folder, e)
         raise HTTPException(status_code=400, detail=str(e))
     except Exception:
         logger.exception("Error inesperado procesando servicio '%s'", service)
@@ -91,10 +93,12 @@ async def confirm_campaign(
         result = await strategy.confirm(payload.campaignId, payload.codeGroup)
         return JSONResponse(status_code=200, content=result)
     except FileNotFoundError as e:
-        logger.warning("Archivo no encontrado en confirm [%s]: %s", service, e)
+        logger.warning("Archivo no encontrado en confirm [%s] | campaigns=%s | error=%s",
+                       service, payload.campaignId, e)
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
-        logger.warning("Error de validación en confirm [%s]: %s", service, e)
+        logger.warning("Error de validación en confirm [%s] | campaigns=%s | error=%s",
+                       service, payload.campaignId, e)
         raise HTTPException(status_code=400, detail=str(e))
     except Exception:
         logger.exception("Error inesperado confirmando servicio '%s'", service)
