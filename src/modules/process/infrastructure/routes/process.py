@@ -18,6 +18,7 @@ from modules.process.infrastructure.routes.docs import (
     PROCESSING_BODY_SCHEMA, PROCESSING_EXAMPLES, PROCESSING_DESCRIPTION, PROCESSING_RESPONSES,
     CONFIRM_BODY_SCHEMA, CONFIRM_EXAMPLES, CONFIRM_DESCRIPTION, CONFIRM_RESPONSES,
 )
+from modules.process.infrastructure.errors import build_error_detail
 
 logger = logging.getLogger(__name__)
 
@@ -55,14 +56,14 @@ async def process_data(
     except FileNotFoundError as e:
         logger.warning("Archivo no encontrado en processing [%s] | path=%s | error=%s",
                        service, payload.configFile.folder, e)
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=build_error_detail(str(e)))
     except ValueError as e:
         logger.warning("Error de validación en processing [%s] | path=%s | error=%s",
                        service, payload.configFile.folder, e)
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=build_error_detail(str(e)))
     except Exception:
         logger.exception("Error inesperado procesando servicio '%s'", service)
-        raise HTTPException(status_code=500, detail="Error interno del servidor.")
+        raise HTTPException(status_code=500, detail=build_error_detail("INTERNAL_SERVER_ERROR: Error interno del servidor."))
 
 
 @router.post(
@@ -95,14 +96,14 @@ async def confirm_campaign(
     except FileNotFoundError as e:
         logger.warning("Archivo no encontrado en confirm [%s] | campaigns=%s | error=%s",
                        service, payload.campaignId, e)
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=build_error_detail(str(e)))
     except ValueError as e:
         logger.warning("Error de validación en confirm [%s] | campaigns=%s | error=%s",
                        service, payload.campaignId, e)
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=build_error_detail(str(e)))
     except Exception:
         logger.exception("Error inesperado confirmando servicio '%s'", service)
-        raise HTTPException(status_code=500, detail="Error interno del servidor.")
+        raise HTTPException(status_code=500, detail=build_error_detail("INTERNAL_SERVER_ERROR: Error interno del servidor."))
 
 
 @router.get(

@@ -8,6 +8,7 @@ from modules.process.infrastructure.routes.preview import router as preview_rout
 from modules.process.infrastructure.routes.docs import (
     APP_TITLE, APP_VERSION, APP_DESCRIPTION, OPENAPI_TAGS,
 )
+from modules.process.infrastructure.errors import build_error_detail
 from config.settings import settings
 from lifespan import lifespan
 
@@ -30,10 +31,8 @@ def create_app() -> FastAPI:
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
         error = exc.errors()[0]
-        loc = error.get("loc", ())
-        if loc and loc[0] == "path":
-            return JSONResponse(status_code=400, content={"detail": error["msg"]})
-        return JSONResponse(status_code=422, content={"detail": error["msg"]})
+        status_code = 400 if (error.get("loc") and error["loc"][0] == "path") else 422
+        return JSONResponse(status_code=status_code, content={"detail": build_error_detail(error["msg"])})
 
     # app.include_router(preload_router, prefix=settings.prefix_app, tags=["Data Processing Service"])
     app.include_router(process_router, prefix=settings.prefix_app)

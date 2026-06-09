@@ -6,6 +6,7 @@ from modules.process.app.files.preview import get_first_rows
 from modules.process.infrastructure.routes.docs import (
     PREVIEW_DESCRIPTION, PREVIEW_RESPONSES, PREVIEW_OPENAPI_EXTRA,
 )
+from modules.process.infrastructure.errors import build_error_detail
 from config.settings import settings
 from logging_config import get_logger
 
@@ -57,11 +58,11 @@ async def first_rows(payload: PreviewRequest):
             base_dir=settings.repository_files_dir,
         )
     except PermissionError as e:
-        raise HTTPException(status_code=403, detail=str(e))
+        raise HTTPException(status_code=403, detail=build_error_detail(str(e)))
     except FileNotFoundError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=build_error_detail(str(e)))
     except Exception:
         logger.exception("Error inesperado leyendo preview de '%s'", payload.file)
-        raise HTTPException(status_code=500, detail="Error interno del servidor.")
+        raise HTTPException(status_code=500, detail=build_error_detail("INTERNAL_SERVER_ERROR: Error interno del servidor."))
 
     return JSONResponse(status_code=200, content=result)

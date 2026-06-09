@@ -344,7 +344,7 @@ class TestPreviewEndpoint:
             )
 
         assert resp.status_code == 404
-        assert "FILE_NOT_FOUND" in resp.json()["detail"]
+        assert resp.json()["detail"]["code"] == "FILE_NOT_FOUND"
 
 
 # ══════════════════════════════════════════════════════════════════════════════
