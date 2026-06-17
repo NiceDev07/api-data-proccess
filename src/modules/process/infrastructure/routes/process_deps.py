@@ -27,6 +27,7 @@ from modules.process.app.process.sms import SmsProcessor
 from modules.process.app.services.cost import CostService
 from modules.process.app.services.numeration import NumerationService
 from modules.process.app.use_case.process import ProcessDataUseCase
+from modules.process.app.use_case.send_email_test import SendEmailTestUseCase
 from modules.process.domain.enums.services import ServiceType
 from modules.process.domain.models.confirm_dto import ConfirmRequest
 from modules.process.domain.models.process_dto import (
@@ -40,7 +41,9 @@ from modules.process.infrastructure.repositories.cost import CostRepository
 from modules.process.infrastructure.repositories.confirm.email import EmailConfirmRepository
 from modules.process.infrastructure.repositories.numeration import NumeracionRepository
 from modules.process.infrastructure.repositories.confirm.sms import SmsConfirmRepository
+from modules.process.infrastructure.email.smtp_sender import SmtpEmailSender
 from modules.process.infrastructure.errors import build_error_detail
+from config.settings import settings
 
 
 # ── dependencias compartidas ───────────────────────────────────────────────────
@@ -78,6 +81,26 @@ def get_use_case(
         file_reader_factory=shared.file_reader_factory,
         level_validator=shared.level_validator,
         processor_factory=ProcessorFactory(processors),
+    )
+
+
+# ── send email test use case ──────────────────────────────────────────────────
+
+def get_send_email_test_use_case(
+    shared: ProcessSharedDeps = Depends(get_shared_deps),
+) -> SendEmailTestUseCase:
+    # Construye el sender SMTP con las credenciales del .env y lo inyecta junto
+    # con la factory de readers que ya vive en las dependencias compartidas.
+    sender = SmtpEmailSender(
+        host     = settings.smtp_mail_test_host,
+        port     = settings.smtp_mail_test_port,
+        user     = settings.smtp_mail_test_domain_user,
+        password = settings.smtp_mail_test_password,
+        sender   = settings.smtp_mail_test_domain_send,
+    )
+    return SendEmailTestUseCase(
+        sender              = sender,
+        file_reader_factory = shared.file_reader_factory,
     )
 
 

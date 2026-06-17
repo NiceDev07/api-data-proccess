@@ -63,7 +63,7 @@ async def process_data(
         raise HTTPException(status_code=400, detail=build_error_detail(str(e)))
     except Exception:
         logger.exception("Error inesperado procesando servicio '%s'", service)
-        raise HTTPException(status_code=500, detail=build_error_detail("INTERNAL_SERVER_ERROR: Error interno del servidor."))
+        raise HTTPException(status_code=500, detail=build_error_detail("INTERNAL_SERVER_ERROR: Internal server error."))
 
 
 @router.post(
@@ -103,7 +103,7 @@ async def confirm_campaign(
         raise HTTPException(status_code=400, detail=build_error_detail(str(e)))
     except Exception:
         logger.exception("Error inesperado confirmando servicio '%s'", service)
-        raise HTTPException(status_code=500, detail=build_error_detail("INTERNAL_SERVER_ERROR: Error interno del servidor."))
+        raise HTTPException(status_code=500, detail=build_error_detail("INTERNAL_SERVER_ERROR: Internal server error."))
 
 
 @router.get(
