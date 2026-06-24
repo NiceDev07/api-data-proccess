@@ -139,12 +139,13 @@ class SmsDataProcessingDTO(DataProcessingDTO):
     def validate_shortname(self) -> "SmsDataProcessingDTO":
         if not self.content or not self.content.strip():
             raise ValueError("CONTENT_REQUIRED: content is required for SMS.")
-        if not self.rulesCountry.useShortName:
-            return self
-        if not self.shortname or not self.shortname.strip():
+
+        if (
+            self.rulesCountry.useShortName
+            and (not self.shortname or not self.shortname.strip())
+        ):
             raise ValueError("SHORTNAME_REQUIRED: Shortname is required.")
-        if self.shortname not in self.content:
-            raise ValueError("SHORTNAME_NOT_IN_CONTENT: Message content must include the shortname.")
+
         return self
 
 
