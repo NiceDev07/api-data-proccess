@@ -24,11 +24,11 @@ async def get_first_rows(
     allowed   = os.path.realpath(base_dir)
 
     if not file_path.startswith(allowed + os.sep) and file_path != allowed:
-        logger.error("Path traversal attempt blocked: %s", file_path)
+        logger.warning("Path traversal attempt blocked: %s", file_path)
         raise PermissionError("ACCESS_DENIED: Path is outside the authorized directory.")
 
     if not os.path.isfile(file_path):
-        logger.error("File not found for preview: %s", file_path)
+        logger.warning("File not found for preview: %s", file_path)
         raise FileNotFoundError("FILE_NOT_FOUND: The file was not found at the specified path.")
 
     # Reader en modo preview: valores como string y encabezados originales.

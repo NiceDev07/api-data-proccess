@@ -1,13 +1,9 @@
-"""
-SendEmailTestUseCase — orquesta el envío de correos de prueba antes de
-procesar una campaña completa. Lee las primeras N filas del CSV, reemplaza
-las etiquetas {tag} con los valores reales y envía un correo por destinatario.
-"""
 import re
 from typing import Any, Dict, List
 
 from modules.process.app.files.factory import ReaderFileFactory
 from modules.process.domain.models.process_dto import EmailTestRequest
+from modules.process.domain.utils import normalize_col_name
 
 # Regex de email igual al pipeline ValidateEmail — mantiene la validación consistente.
 _EMAIL_RE = re.compile(r"^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$")
@@ -48,6 +44,10 @@ class SendEmailTestUseCase:
         config = payload.configFile.model_copy(update={"n_rows": valid_count})
         reader = self._reader_factory.create(config.file, preview=True)
         df = (await reader.read(config)).collect()
+        # Normaliza los headers (sin acentos, minúsculas) para que las {tag} del cliente
+        # matcheen con las columnas del CSV sin importar capitalización. Los valores siguen
+        # como string gracias a preview=True (no salen con ".0").
+        df = df.rename({c: normalize_col_name(c) for c in df.columns})
 
         results: List[Dict[str, Any]] = []
         valid_idx = 0

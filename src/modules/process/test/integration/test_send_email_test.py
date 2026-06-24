@@ -186,3 +186,24 @@ async def test_tag_faltante_en_csv_queda_tal_cual(tmp_path):
     result = await _make_use_case(sender)(payload)
 
     assert result[0]["content"] == "Hola Juan, código: {desconocido}"
+
+
+async def test_headers_en_mayusculas_y_con_acentos_se_normalizan(tmp_path):
+    """Si el CSV tiene 'NOMBRE' o 'Cédula' y el cliente manda {nombre}/{cedula}, debe matchear."""
+    _write_csv(tmp_path, "data.csv",
+               "NOMBRE,Cédula,correo\n"
+               "Juan,12345678,a@m.com\n")
+
+    sender = AsyncMock()
+    sender.send = AsyncMock(return_value=True)
+
+    payload = _make_payload(
+        tmp_path, "data.csv",
+        [EmailRecipient(demographic="dest@m.com", status=True)],
+        content="Hola {nombre}, tu cédula es {cedula}",
+        subject="Para {nombre}",
+    )
+    result = await _make_use_case(sender)(payload)
+
+    assert result[0]["content"] == "Hola Juan, tu cédula es 12345678"
+    assert result[0]["subject"] == "Para Juan"
