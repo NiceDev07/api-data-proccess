@@ -26,7 +26,7 @@ def probe_duration(file_path: str, extra: int = _EXTRA_SECONDS) -> float:
     if not os.path.exists(file_path):
         # Log con el path para diagnóstico; el cliente solo ve el RuntimeError genérico.
         logger.debug("Audio no encontrado | path=%s", file_path)
-        raise RuntimeError("El archivo de audio no existe.")
+        raise RuntimeError("The audio file does not exist.")
 
     try:
         result = subprocess.run(
@@ -42,13 +42,13 @@ def probe_duration(file_path: str, extra: int = _EXTRA_SECONDS) -> float:
     except FileNotFoundError:
         logger.debug("ffprobe no instalado en el sistema")
         raise RuntimeError(
-            "ffprobe no está instalado. Instálalo con 'sudo apt-get install ffmpeg'."
+            "ffprobe is not installed. Install it with 'sudo apt-get install ffmpeg'."
         )
     except subprocess.CalledProcessError as e:
         logger.debug("ffprobe falló al procesar | path=%s | stderr=%s", file_path, e.stderr.strip())
-        raise RuntimeError(f"Error al ejecutar ffprobe: {e.stderr.strip()}")
+        raise RuntimeError(f"Error running ffprobe: {e.stderr.strip()}")
     except (json.JSONDecodeError, KeyError, ValueError):
         logger.debug("Audio corrupto o no soportado | path=%s", file_path)
         raise RuntimeError(
-            "Error al procesar el archivo de audio; puede estar corrupto o no ser soportado."
+            "Error processing the audio file; it may be corrupted or unsupported."
         )

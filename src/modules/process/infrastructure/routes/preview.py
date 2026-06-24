@@ -63,6 +63,6 @@ async def first_rows(payload: PreviewRequest):
         raise HTTPException(status_code=404, detail=build_error_detail(str(e)))
     except Exception:
         logger.exception("Error inesperado leyendo preview de '%s'", payload.file)
-        raise HTTPException(status_code=500, detail=build_error_detail("INTERNAL_SERVER_ERROR: Error interno del servidor."))
+        raise HTTPException(status_code=500, detail=build_error_detail("INTERNAL_SERVER_ERROR: Internal server error."))
 
     return JSONResponse(status_code=200, content=result)

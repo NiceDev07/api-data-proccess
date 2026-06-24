@@ -146,3 +146,31 @@ class SmsDataProcessingDTO(DataProcessingDTO):
         if self.shortname not in self.content:
             raise ValueError("SHORTNAME_NOT_IN_CONTENT: Message content must include the shortname.")
         return self
+
+
+class EmailRecipient(BaseModel):
+    demographic: str = Field(..., description="Correo destino al que se envía la prueba.")
+    status: bool = Field(..., description="Si `false`, el destinatario se omite del envío.")
+
+
+class EmailTestRequest(BaseModel):
+    """
+    Payload para `POST /v2/send-email-test`.
+
+    Envía correos de prueba a una lista de destinatarios (1-5) con el contenido
+    real de la campaña, reemplazando las etiquetas `{tag}` con los valores de
+    las primeras filas del CSV.
+    """
+
+    subService: str = Field(..., description="Sub-servicio de email aplicado a la prueba.")
+    content: str = Field(..., description="HTML del correo con etiquetas `{tag}` a reemplazar desde el CSV.")
+    subject: str = Field(..., description="Asunto del correo con etiquetas `{tag}` opcionales.")
+    listDemographics: List[EmailRecipient] = Field(..., description="Destinatarios de prueba (1-5 elementos).")
+    configFile: ConfigFile = Field(..., description="Configuración del archivo CSV de la campaña.")
+
+    @field_validator("listDemographics")
+    @classmethod
+    def _validate_count(cls, v: List[EmailRecipient]) -> List[EmailRecipient]:
+        if not (1 <= len(v) <= 5):
+            raise ValueError("INVALID_RECIPIENTS_COUNT: listDemographics must have between 1 and 5 elements.")
+        return v

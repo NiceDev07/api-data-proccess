@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 # from modules.data_processing.infrastructure.routes.preload_camp import router as preload_router
 from modules.process.infrastructure.routes.process import router as process_router
 from modules.process.infrastructure.routes.preview import router as preview_router
+from modules.process.infrastructure.routes.email_test import router as email_test_router
 from modules.process.infrastructure.routes.docs import (
     APP_TITLE, APP_VERSION, APP_DESCRIPTION, OPENAPI_TAGS,
 )
@@ -31,12 +32,16 @@ def create_app() -> FastAPI:
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
         error = exc.errors()[0]
+        # Pydantic prefija los validators custom con "Value error, " — lo quitamos para
+        # que build_error_detail extraiga correctamente el CODE del mensaje.
+        msg = error["msg"].removeprefix("Value error, ")
         status_code = 400 if (error.get("loc") and error["loc"][0] == "path") else 422
-        return JSONResponse(status_code=status_code, content={"detail": build_error_detail(error["msg"])})
+        return JSONResponse(status_code=status_code, content={"detail": build_error_detail(msg)})
 
     # app.include_router(preload_router, prefix=settings.prefix_app, tags=["Data Processing Service"])
     app.include_router(process_router, prefix=settings.prefix_app)
     app.include_router(preview_router, prefix=settings.prefix_app)
+    app.include_router(email_test_router, prefix=settings.prefix_app)
     return app
 
 app = create_app()
