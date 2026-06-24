@@ -10,12 +10,20 @@ class ShortNameRegulation(IRegulation):
         if not ctx.rulesCountry.useShortName:
             return df
 
-        missing = ~pl.col(Cols.message).str.contains(ctx.shortname, literal=True)
+        missing = ~(
+            pl.col(Cols.message)
+            .str.to_lowercase()
+            .str.contains(ctx.shortname.lower(), literal=True)
+        )
+
         to_mark = pl.col(Cols.is_ok) & missing
 
         return df.with_columns(
-            pl.when(to_mark).then(pl.lit(False)).otherwise(pl.col(Cols.is_ok))
+            pl.when(to_mark)
+            .then(pl.lit(False))
+            .otherwise(pl.col(Cols.is_ok))
             .alias(Cols.is_ok),
+
             pl.when(to_mark)
             .then(pl.lit(ExclusionReason.SHORTNAME_MISSING))
             .otherwise(pl.col(Cols.error_code))
