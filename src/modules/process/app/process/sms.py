@@ -35,6 +35,7 @@ _ERROR_DESCRIPTIONS: dict[str, str] = {
     ExclusionReason.INVALID_NUMBER_LENGTH:    "Number does not meet the required length.",
     ExclusionReason.SHORTNAME_MISSING:        "Message does not contain the required shortname.",
     ExclusionReason.SPECIAL_CHAR_NOT_ALLOWED: "Destination does not allow special characters.",
+    ExclusionReason.URL_REQUIRED:             "Message must include a URL for landing sub-service.",
     # ExclusionReason.CHAR_LIMIT_EXCEEDED:      "Message exceeds the allowed character limit.",
 }
 
