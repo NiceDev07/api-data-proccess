@@ -208,27 +208,31 @@ async def test_sms_flow_custom_message_tag():
     assert result["success"] is True
 
 
-@pytest.mark.anyio
-async def test_sms_flow_char_limit_exceeded():
-    """Messages exceeding limitCharacter are marked is_ok=False with CHAR_LIMIT_EXCEEDED."""
-    from modules.process.domain.models.process_dto import RulesCountry
-
-    processor = SmsProcessor(
-        numeration_service=numeration_mock(),
-        exclusion_source=exclusion_mock(col="number"),
-        cost_service=cost_mock(),
-        storage=AnalysisStorage("sms_flow/char_limit_exceeded"),
-    )
-
-    rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "limitCharacter": 160, "useCharacterSpecial": False})
-    payload = make_payload(content="A" * 161, rulesCountry=rules)
-    df = await read_df(payload)
-    result = await processor.process(df, payload)
-
-    violations = result.get("violations", [])
-    assert any(v["code"] == ExclusionReason.CHAR_LIMIT_EXCEEDED for v in violations), (
-        f"Se esperaba violación CHAR_LIMIT_EXCEEDED en violations: {violations}"
-    )
+# test_sms_flow_char_limit_exceeded — DESACTIVADO. CharLimitRegulation está
+# comentada porque el flujo activo del data-process anterior no rechazaba
+# mensajes largos: CalculatePDU los cobra como multi-parte.
+#
+# @pytest.mark.anyio
+# async def test_sms_flow_char_limit_exceeded():
+#     """Messages exceeding limitCharacter are marked is_ok=False with CHAR_LIMIT_EXCEEDED."""
+#     from modules.process.domain.models.process_dto import RulesCountry
+#
+#     processor = SmsProcessor(
+#         numeration_service=numeration_mock(),
+#         exclusion_source=exclusion_mock(col="number"),
+#         cost_service=cost_mock(),
+#         storage=AnalysisStorage("sms_flow/char_limit_exceeded"),
+#     )
+#
+#     rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "limitCharacter": 160, "useCharacterSpecial": False})
+#     payload = make_payload(content="A" * 161, rulesCountry=rules)
+#     df = await read_df(payload)
+#     result = await processor.process(df, payload)
+#
+#     violations = result.get("violations", [])
+#     assert any(v["code"] == ExclusionReason.CHAR_LIMIT_EXCEEDED for v in violations), (
+#         f"Se esperaba violación CHAR_LIMIT_EXCEEDED en violations: {violations}"
+#     )
 
 
 @pytest.mark.anyio
