@@ -142,6 +142,16 @@ class TestCustomMessage:
         assert result[Cols.message][0] == "Hola Juan"
         assert result[Cols.message][1] == "Hola María"
 
+    async def test_null_tag_value_does_not_blank_full_row(self):
+        # Regresión: celdas vacías en columnas de tag dejaban el mensaje
+        # completo en null por concat_str, y el proveedor descartaba el envío.
+        df = pl.DataFrame({"phone": [1, 2, 3], "referencia": ["ABC", None, "XYZ"]})
+        ctx = make_ctx(content="Su referencia es {referencia}.")
+        result = await CustomMessage().execute(df, ctx)
+        assert result[Cols.message][0] == "Su referencia es ABC."
+        assert result[Cols.message][1] == "Su referencia es ."
+        assert result[Cols.message][2] == "Su referencia es XYZ."
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Landing
