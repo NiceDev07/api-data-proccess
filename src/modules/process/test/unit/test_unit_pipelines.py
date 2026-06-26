@@ -180,12 +180,19 @@ class TestLanding:
         assert result[Cols.is_ok].all()
         assert result[Cols.error_code].is_null().all()
 
-    async def test_landing_without_url_marks_row_invalid(self):
+    async def test_landing_without_url_aborts_campaign(self):
+        # All-or-nothing: si todos los registros carecen de URL, abortamos.
         df = self._df(["Sin enlace"])
         ctx = make_ctx(sub_service="landing", content="Sin enlace")
-        result = await Landing().execute(df, ctx)
-        assert not result[Cols.is_ok].any()
-        assert result[Cols.error_code][0] == "URL_REQUIRED"
+        with pytest.raises(ValueError, match="URL_REQUIRED_IN_ALL"):
+            await Landing().execute(df, ctx)
+
+    async def test_landing_partial_url_aborts_campaign(self):
+        # Caso real: la URL viene de un {tag} y algunas filas la tienen y otras no.
+        df = self._df(["Visita https://promo.co/oferta", "Sin enlace"])
+        ctx = make_ctx(sub_service="landing", content="Hola {nombre}, {mensaje}")
+        with pytest.raises(ValueError, match="URL_REQUIRED_IN_ALL"):
+            await Landing().execute(df, ctx)
 
     async def test_landing_url_inside_replaced_tag_passes(self):
         # Caso real: el cliente usa {mensaje} y la URL viene del CSV ya reemplazada.
@@ -194,8 +201,9 @@ class TestLanding:
         result = await Landing().execute(df, ctx)
         assert result[Cols.is_ok].all()
 
-    async def test_landing_already_excluded_stays_excluded(self):
-        # Si la fila ya estaba marcada inválida (ej. NO_OPERATOR), no sobrescribimos.
+    async def test_landing_already_excluded_does_not_trigger_abort(self):
+        # Si la fila ya estaba marcada inválida (ej. NO_OPERATOR), no se evalúa
+        # ni se sobrescribe — Landing solo mira filas con is_ok=True.
         df = pl.DataFrame({
             Cols.message: ["Sin URL"],
             Cols.is_ok: [False],
@@ -637,21 +645,22 @@ class TestShortNameRegulation:
         result = self._reg.validate(self._df(["Oferta SAEM3 disponible"]), ctx2)
         assert result[Cols.is_ok][0] is True
 
-    def test_shortname_missing_marks_row(self):
-        # El shortname "SAEM3" no aparece en el mensaje (comparación case-insensitive).
+    def test_shortname_missing_aborts_campaign(self):
+        # All-or-nothing: si algún registro carece del shortname, la regulación
+        # aborta la campaña en vez de marcar per-row.
         rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "useShortName": True})
         ctx = make_ctx(shortname="SAEM3", content="Mensaje sin remitente", rules=rules)
-        result = self._reg.validate(self._df(["Mensaje sin remitente"]), ctx)
-        assert result[Cols.is_ok][0] is False
-        assert result[Cols.error_code][0] == ExclusionReason.SHORTNAME_MISSING
+        with pytest.raises(ValueError, match="SHORTNAME_REQUIRED_IN_ALL"):
+            self._reg.validate(self._df(["Mensaje sin remitente"]), ctx)
 
-    def test_partial_rows_with_shortname(self):
+    def test_partial_rows_aborts_campaign(self):
+        # Caso real: algunos registros tienen el shortname (via {tag} resuelto)
+        # y otros no. Se aborta entera para evitar envíos parciales.
         rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "useShortName": True})
         ctx = make_ctx(shortname="CORP", rules=rules)
         df = self._df(["Hola de parte de CORP", "Hola sin shortname"])
-        result = self._reg.validate(df, ctx)
-        assert result[Cols.is_ok][0] is True
-        assert result[Cols.is_ok][1] is False
+        with pytest.raises(ValueError, match="SHORTNAME_REQUIRED_IN_ALL"):
+            self._reg.validate(df, ctx)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

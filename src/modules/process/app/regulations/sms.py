@@ -18,7 +18,7 @@ class ShortNameRegulation(IRegulation):
 
         to_mark = pl.col(Cols.is_ok) & missing
 
-        return df.with_columns(
+        result = df.with_columns(
             pl.when(to_mark)
             .then(pl.lit(False))
             .otherwise(pl.col(Cols.is_ok))
@@ -29,6 +29,21 @@ class ShortNameRegulation(IRegulation):
             .otherwise(pl.col(Cols.error_code))
             .alias(Cols.error_code),
         )
+
+        # All-or-nothing: si algún registro carece del shortname, abortamos toda
+        # la campaña. No tiene sentido enviar parcial — el gateway downstream
+        # rechaza los mensajes sin el shortname registrado y el cliente termina
+        # pagando por envíos que nunca llegan.
+        has_missing = result.filter(
+            pl.col(Cols.error_code) == ExclusionReason.SHORTNAME_MISSING
+        ).height > 0
+        if has_missing:
+            raise ValueError(
+                "SHORTNAME_REQUIRED_IN_ALL: All records must contain the required "
+                "shortname to send the campaign."
+            )
+
+        return result
 
 
 class SpecialCharRegulation(IRegulation):
