@@ -236,26 +236,49 @@ async def test_sms_flow_custom_message_tag():
 
 
 @pytest.mark.anyio
-async def test_sms_flow_shortname_required():
-    """useShortName=True and shortname absent marks records is_ok=False with SHORTNAME_MISSING."""
+async def test_sms_flow_shortname_missing_aborts_campaign():
+    """useShortName=True y todos los registros sin shortname → campaña abortada."""
     from modules.process.domain.models.process_dto import RulesCountry
 
     processor = SmsProcessor(
         numeration_service=numeration_mock(),
         exclusion_source=exclusion_mock(col="number"),
         cost_service=cost_mock(),
-        storage=AnalysisStorage("sms_flow/shortname_required"),
+        storage=AnalysisStorage("sms_flow/shortname_missing_aborts"),
     )
 
     rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "useShortName": True})
     payload = make_payload(content="Mensaje sin shortname.", rulesCountry=rules)
     df = await read_df(payload)
-    result = await processor.process(df, payload)
 
-    violations = result.get("violations", [])
-    assert any(v["code"] == ExclusionReason.SHORTNAME_MISSING for v in violations), (
-        f"Se esperaba violación SHORTNAME_MISSING en violations: {violations}"
+    with pytest.raises(ValueError, match="SHORTNAME_REQUIRED_IN_ALL"):
+        await processor.process(df, payload)
+
+
+@pytest.mark.anyio
+async def test_sms_flow_shortname_partial_match_aborts_campaign():
+    """Si algunos registros tienen el shortname y otros no → campaña abortada."""
+    from modules.process.domain.models.process_dto import RulesCountry
+
+    processor = SmsProcessor(
+        numeration_service=numeration_mock(),
+        exclusion_source=exclusion_mock(col="number"),
+        cost_service=cost_mock(),
+        storage=AnalysisStorage("sms_flow/shortname_partial"),
     )
+
+    # data.csv tiene 2 filas: nombre="esteban xde" y nombre="otro".
+    # El template referencia {nombre}; el shortname "esteban" solo aparece en una.
+    rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "useShortName": True})
+    payload = make_payload(
+        content="Hola {nombre}, este es tu mensaje.",
+        shortname="esteban",
+        rulesCountry=rules,
+    )
+    df = await read_df(payload)
+
+    with pytest.raises(ValueError, match="SHORTNAME_REQUIRED_IN_ALL"):
+        await processor.process(df, payload)
 
 
 @pytest.mark.anyio
