@@ -208,50 +208,77 @@ async def test_sms_flow_custom_message_tag():
     assert result["success"] is True
 
 
+# test_sms_flow_char_limit_exceeded — DESACTIVADO. CharLimitRegulation está
+# comentada porque el flujo activo del data-process anterior no rechazaba
+# mensajes largos: CalculatePDU los cobra como multi-parte.
+#
+# @pytest.mark.anyio
+# async def test_sms_flow_char_limit_exceeded():
+#     """Messages exceeding limitCharacter are marked is_ok=False with CHAR_LIMIT_EXCEEDED."""
+#     from modules.process.domain.models.process_dto import RulesCountry
+#
+#     processor = SmsProcessor(
+#         numeration_service=numeration_mock(),
+#         exclusion_source=exclusion_mock(col="number"),
+#         cost_service=cost_mock(),
+#         storage=AnalysisStorage("sms_flow/char_limit_exceeded"),
+#     )
+#
+#     rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "limitCharacter": 160, "useCharacterSpecial": False})
+#     payload = make_payload(content="A" * 161, rulesCountry=rules)
+#     df = await read_df(payload)
+#     result = await processor.process(df, payload)
+#
+#     violations = result.get("violations", [])
+#     assert any(v["code"] == ExclusionReason.CHAR_LIMIT_EXCEEDED for v in violations), (
+#         f"Se esperaba violación CHAR_LIMIT_EXCEEDED en violations: {violations}"
+#     )
+
+
 @pytest.mark.anyio
-async def test_sms_flow_char_limit_exceeded():
-    """Messages exceeding limitCharacter are marked is_ok=False with CHAR_LIMIT_EXCEEDED."""
+async def test_sms_flow_shortname_missing_aborts_campaign():
+    """useShortName=True y todos los registros sin shortname → campaña abortada."""
     from modules.process.domain.models.process_dto import RulesCountry
 
     processor = SmsProcessor(
         numeration_service=numeration_mock(),
         exclusion_source=exclusion_mock(col="number"),
         cost_service=cost_mock(),
-        storage=AnalysisStorage("sms_flow/char_limit_exceeded"),
-    )
-
-    rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "limitCharacter": 160, "useCharacterSpecial": False})
-    payload = make_payload(content="A" * 161, rulesCountry=rules)
-    df = await read_df(payload)
-    result = await processor.process(df, payload)
-
-    violations = result.get("violations", [])
-    assert any(v["code"] == ExclusionReason.CHAR_LIMIT_EXCEEDED for v in violations), (
-        f"Se esperaba violación CHAR_LIMIT_EXCEEDED en violations: {violations}"
-    )
-
-
-@pytest.mark.anyio
-async def test_sms_flow_shortname_required():
-    """useShortName=True and shortname absent marks records is_ok=False with SHORTNAME_MISSING."""
-    from modules.process.domain.models.process_dto import RulesCountry
-
-    processor = SmsProcessor(
-        numeration_service=numeration_mock(),
-        exclusion_source=exclusion_mock(col="number"),
-        cost_service=cost_mock(),
-        storage=AnalysisStorage("sms_flow/shortname_required"),
+        storage=AnalysisStorage("sms_flow/shortname_missing_aborts"),
     )
 
     rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "useShortName": True})
     payload = make_payload(content="Mensaje sin shortname.", rulesCountry=rules)
     df = await read_df(payload)
-    result = await processor.process(df, payload)
 
-    violations = result.get("violations", [])
-    assert any(v["code"] == ExclusionReason.SHORTNAME_MISSING for v in violations), (
-        f"Se esperaba violación SHORTNAME_MISSING en violations: {violations}"
+    with pytest.raises(ValueError, match="SHORTNAME_REQUIRED_IN_ALL"):
+        await processor.process(df, payload)
+
+
+@pytest.mark.anyio
+async def test_sms_flow_shortname_partial_match_aborts_campaign():
+    """Si algunos registros tienen el shortname y otros no → campaña abortada."""
+    from modules.process.domain.models.process_dto import RulesCountry
+
+    processor = SmsProcessor(
+        numeration_service=numeration_mock(),
+        exclusion_source=exclusion_mock(col="number"),
+        cost_service=cost_mock(),
+        storage=AnalysisStorage("sms_flow/shortname_partial"),
     )
+
+    # data.csv tiene 2 filas: nombre="esteban xde" y nombre="otro".
+    # El template referencia {nombre}; el shortname "esteban" solo aparece en una.
+    rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "useShortName": True})
+    payload = make_payload(
+        content="Hola {nombre}, este es tu mensaje.",
+        shortname="esteban",
+        rulesCountry=rules,
+    )
+    df = await read_df(payload)
+
+    with pytest.raises(ValueError, match="SHORTNAME_REQUIRED_IN_ALL"):
+        await processor.process(df, payload)
 
 
 @pytest.mark.anyio
@@ -305,18 +332,17 @@ def test_sms_shortname_required_only_when_rule_active():
     SmsDataProcessingDTO.model_validate(base)
 
 
-def test_sms_content_missing_shortname_rejected():
-    """Content sin shortname es rechazado cuando useShortName=True."""
-    from pydantic import ValidationError
+def test_sms_content_missing_shortname_accepted_at_dto():
+    """El DTO ya NO rechaza content sin shortname (validación delegada al pipeline
+    ShortNameRegulation, que valida sobre el mensaje real reemplazado para soportar
+    shortnames que vienen dentro de {tag} del CSV)."""
     from modules.process.domain.models.process_dto import RulesCountry
 
     rules_on = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "useShortName": True})
     base = make_payload(shortname="SAEM3", content="Mensaje sin el remitente.",
                         subService="informative", rulesCountry=rules_on).model_dump()
-    with pytest.raises(ValidationError) as exc_info:
-        SmsDataProcessingDTO.model_validate(base)
-    assert any("shortname" in str(e["msg"]).lower() or "contenido" in str(e["msg"]).lower()
-               for e in exc_info.value.errors())
+    # No debe lanzar ValidationError — el shortname puede llegar vía {tag} reemplazado.
+    SmsDataProcessingDTO.model_validate(base)
 
 
 def test_sms_subservice_invalid_rejected():

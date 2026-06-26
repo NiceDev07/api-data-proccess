@@ -36,7 +36,7 @@ from modules.process.app.pipelines.email.validate_email import ValidateEmail
 from modules.process.app.pipelines.sms.validate_phone_length import ValidatePhoneLength
 from modules.process.app.pipelines.sms.validate_regulations import ValidateRegulations
 from modules.process.app.regulations.sms import (
-    CharLimitRegulation,
+    # CharLimitRegulation,  # desactivada — ver app/regulations/sms.py
     ShortNameRegulation,
     SpecialCharRegulation,
 )
@@ -142,29 +142,77 @@ class TestCustomMessage:
         assert result[Cols.message][0] == "Hola Juan"
         assert result[Cols.message][1] == "Hola María"
 
+    async def test_null_tag_value_does_not_blank_full_row(self):
+        # Regresión: celdas vacías en columnas de tag dejaban el mensaje
+        # completo en null por concat_str, y el proveedor descartaba el envío.
+        df = pl.DataFrame({"phone": [1, 2, 3], "referencia": ["ABC", None, "XYZ"]})
+        ctx = make_ctx(content="Su referencia es {referencia}.")
+        result = await CustomMessage().execute(df, ctx)
+        assert result[Cols.message][0] == "Su referencia es ABC."
+        assert result[Cols.message][1] == "Su referencia es ."
+        assert result[Cols.message][2] == "Su referencia es XYZ."
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Landing
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestLanding:
+    @staticmethod
+    def _df(messages: list[str]) -> pl.DataFrame:
+        # Helper que arma el DataFrame con las columnas que Landing necesita.
+        return pl.DataFrame({
+            Cols.message: messages,
+            Cols.is_ok: [True] * len(messages),
+            Cols.error_code: [None] * len(messages),
+        }, schema={Cols.message: pl.Utf8, Cols.is_ok: pl.Boolean, Cols.error_code: pl.Utf8})
+
     async def test_non_landing_subservice_passthrough(self):
-        df = pl.DataFrame({Cols.message: ["Sin URL"]})
+        df = self._df(["Sin URL"])
         ctx = make_ctx(sub_service="informative", content="Sin URL")
         result = await Landing().execute(df, ctx)
         assert result.shape == df.shape
 
     async def test_landing_with_url_passthrough(self):
-        df = pl.DataFrame({Cols.message: ["Visita https://short.url ahora"]})
+        df = self._df(["Visita https://short.url ahora"])
         ctx = make_ctx(sub_service="landing", content="Visita https://short.url ahora")
         result = await Landing().execute(df, ctx)
-        assert result.shape == df.shape
+        assert result[Cols.is_ok].all()
+        assert result[Cols.error_code].is_null().all()
 
-    async def test_landing_without_url_raises(self):
-        df = pl.DataFrame({Cols.message: ["Sin enlace"]})
+    async def test_landing_without_url_aborts_campaign(self):
+        # All-or-nothing: si todos los registros carecen de URL, abortamos.
+        df = self._df(["Sin enlace"])
         ctx = make_ctx(sub_service="landing", content="Sin enlace")
-        with pytest.raises(ValueError, match="URL"):
+        with pytest.raises(ValueError, match="URL_REQUIRED_IN_ALL"):
             await Landing().execute(df, ctx)
+
+    async def test_landing_partial_url_aborts_campaign(self):
+        # Caso real: la URL viene de un {tag} y algunas filas la tienen y otras no.
+        df = self._df(["Visita https://promo.co/oferta", "Sin enlace"])
+        ctx = make_ctx(sub_service="landing", content="Hola {nombre}, {mensaje}")
+        with pytest.raises(ValueError, match="URL_REQUIRED_IN_ALL"):
+            await Landing().execute(df, ctx)
+
+    async def test_landing_url_inside_replaced_tag_passes(self):
+        # Caso real: el cliente usa {mensaje} y la URL viene del CSV ya reemplazada.
+        df = self._df(["Hola Juan, visita https://promo.co/oferta"])
+        ctx = make_ctx(sub_service="landing", content="Hola {nombre}, {mensaje}")
+        result = await Landing().execute(df, ctx)
+        assert result[Cols.is_ok].all()
+
+    async def test_landing_already_excluded_does_not_trigger_abort(self):
+        # Si la fila ya estaba marcada inválida (ej. NO_OPERATOR), no se evalúa
+        # ni se sobrescribe — Landing solo mira filas con is_ok=True.
+        df = pl.DataFrame({
+            Cols.message: ["Sin URL"],
+            Cols.is_ok: [False],
+            Cols.error_code: ["NO_OPERATOR"],
+        }, schema={Cols.message: pl.Utf8, Cols.is_ok: pl.Boolean, Cols.error_code: pl.Utf8})
+        ctx = make_ctx(sub_service="landing", content="Sin URL")
+        result = await Landing().execute(df, ctx)
+        assert not result[Cols.is_ok][0]
+        assert result[Cols.error_code][0] == "NO_OPERATOR"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -597,20 +645,22 @@ class TestShortNameRegulation:
         result = self._reg.validate(self._df(["Oferta SAEM3 disponible"]), ctx2)
         assert result[Cols.is_ok][0] is True
 
-    def test_shortname_missing_marks_row(self):
+    def test_shortname_missing_aborts_campaign(self):
+        # All-or-nothing: si algún registro carece del shortname, la regulación
+        # aborta la campaña en vez de marcar per-row.
         rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "useShortName": True})
-        ctx = make_ctx(shortname="EMPRESA", content="Mensaje sin empresa", rules=rules)
-        result = self._reg.validate(self._df(["Mensaje sin empresa"]), ctx)
-        assert result[Cols.is_ok][0] is False
-        assert result[Cols.error_code][0] == ExclusionReason.SHORTNAME_MISSING
+        ctx = make_ctx(shortname="SAEM3", content="Mensaje sin remitente", rules=rules)
+        with pytest.raises(ValueError, match="SHORTNAME_REQUIRED_IN_ALL"):
+            self._reg.validate(self._df(["Mensaje sin remitente"]), ctx)
 
-    def test_partial_rows_with_shortname(self):
+    def test_partial_rows_aborts_campaign(self):
+        # Caso real: algunos registros tienen el shortname (via {tag} resuelto)
+        # y otros no. Se aborta entera para evitar envíos parciales.
         rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "useShortName": True})
         ctx = make_ctx(shortname="CORP", rules=rules)
         df = self._df(["Hola de parte de CORP", "Hola sin shortname"])
-        result = self._reg.validate(df, ctx)
-        assert result[Cols.is_ok][0] is True
-        assert result[Cols.is_ok][1] is False
+        with pytest.raises(ValueError, match="SHORTNAME_REQUIRED_IN_ALL"):
+            self._reg.validate(df, ctx)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -644,48 +694,48 @@ class TestSpecialCharRegulation:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CharLimitRegulation
+# CharLimitRegulation — DESACTIVADA. Tests comentados por si se reactiva.
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestCharLimitRegulation:
-    _reg = SpecialCharRegulation()
-
-    def _df(self, lengths: list[int], is_special: list[bool]) -> pl.DataFrame:
-        return pl.DataFrame(
-            {
-                Cols.length:     lengths,
-                Cols.is_special: is_special,
-                Cols.is_ok:      [True] * len(lengths),
-                Cols.error_code: [None] * len(lengths),
-            },
-            schema={
-                Cols.length: pl.Int32, Cols.is_special: pl.Boolean,
-                Cols.is_ok: pl.Boolean, Cols.error_code: pl.Utf8,
-            },
-        )
-
-    def test_within_standard_limit_ok(self):
-        rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "limitCharacter": 160, "useCharacterSpecial": True})
-        ctx = make_ctx(rules=rules)
-        df = self._df([160], [False])
-        result = CharLimitRegulation().validate(df, ctx)
-        assert result[Cols.is_ok][0] is True
-
-    def test_over_standard_limit_marked(self):
-        rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "limitCharacter": 160})
-        ctx = make_ctx(rules=rules)
-        df = self._df([161], [False])
-        result = CharLimitRegulation().validate(df, ctx)
-        assert result[Cols.is_ok][0] is False
-        assert result[Cols.error_code][0] == ExclusionReason.CHAR_LIMIT_EXCEEDED
-
-    def test_special_char_uses_special_limit(self):
-        rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "limitCharacter": 160, "limitCharacterSpecial": 70})
-        ctx = make_ctx(rules=rules)
-        df = self._df([71], [True])
-        result = CharLimitRegulation().validate(df, ctx)
-        assert result[Cols.is_ok][0] is False
-        assert result[Cols.error_code][0] == ExclusionReason.CHAR_LIMIT_EXCEEDED
+# class TestCharLimitRegulation:
+#     _reg = SpecialCharRegulation()
+#
+#     def _df(self, lengths: list[int], is_special: list[bool]) -> pl.DataFrame:
+#         return pl.DataFrame(
+#             {
+#                 Cols.length:     lengths,
+#                 Cols.is_special: is_special,
+#                 Cols.is_ok:      [True] * len(lengths),
+#                 Cols.error_code: [None] * len(lengths),
+#             },
+#             schema={
+#                 Cols.length: pl.Int32, Cols.is_special: pl.Boolean,
+#                 Cols.is_ok: pl.Boolean, Cols.error_code: pl.Utf8,
+#             },
+#         )
+#
+#     def test_within_standard_limit_ok(self):
+#         rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "limitCharacter": 160, "useCharacterSpecial": True})
+#         ctx = make_ctx(rules=rules)
+#         df = self._df([160], [False])
+#         result = CharLimitRegulation().validate(df, ctx)
+#         assert result[Cols.is_ok][0] is True
+#
+#     def test_over_standard_limit_marked(self):
+#         rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "limitCharacter": 160})
+#         ctx = make_ctx(rules=rules)
+#         df = self._df([161], [False])
+#         result = CharLimitRegulation().validate(df, ctx)
+#         assert result[Cols.is_ok][0] is False
+#         assert result[Cols.error_code][0] == ExclusionReason.CHAR_LIMIT_EXCEEDED
+#
+#     def test_special_char_uses_special_limit(self):
+#         rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "limitCharacter": 160, "limitCharacterSpecial": 70})
+#         ctx = make_ctx(rules=rules)
+#         df = self._df([71], [True])
+#         result = CharLimitRegulation().validate(df, ctx)
+#         assert result[Cols.is_ok][0] is False
+#         assert result[Cols.error_code][0] == ExclusionReason.CHAR_LIMIT_EXCEEDED
 
 
 # ─────────────────────────────────────────────────────────────────────────────

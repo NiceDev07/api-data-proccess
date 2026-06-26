@@ -44,7 +44,10 @@ def build_template_expr(
             if available_columns is not None and normalized_tag not in available_columns:
                 exprs.append(pl.lit(""))
             else:
-                col_expr = pl.col(normalized_tag).cast(pl.Utf8)
+                # fill_null("") evita que una celda vacía propague null a toda la
+                # fila por concat_str — el mensaje quedaría sin texto y el
+                # proveedor descartaría el envío.
+                col_expr = pl.col(normalized_tag).cast(pl.Utf8).fill_null("")
                 tipo = (label_map or {}).get(tag, "") or (label_map or {}).get(normalized_tag, "")
                 if tipo and tipo != "undefined":
                     col_expr = pl.concat_str([pl.lit(f"{{{tipo}:"), col_expr, pl.lit("}")])
