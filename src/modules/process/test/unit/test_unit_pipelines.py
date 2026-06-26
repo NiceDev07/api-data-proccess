@@ -36,7 +36,7 @@ from modules.process.app.pipelines.email.validate_email import ValidateEmail
 from modules.process.app.pipelines.sms.validate_phone_length import ValidatePhoneLength
 from modules.process.app.pipelines.sms.validate_regulations import ValidateRegulations
 from modules.process.app.regulations.sms import (
-    CharLimitRegulation,
+    # CharLimitRegulation,  # desactivada — ver app/regulations/sms.py
     ShortNameRegulation,
     SpecialCharRegulation,
 )
@@ -141,6 +141,16 @@ class TestCustomMessage:
         result = await CustomMessage().execute(df, ctx)
         assert result[Cols.message][0] == "Hola Juan"
         assert result[Cols.message][1] == "Hola María"
+
+    async def test_null_tag_value_does_not_blank_full_row(self):
+        # Regresión: celdas vacías en columnas de tag dejaban el mensaje
+        # completo en null por concat_str, y el proveedor descartaba el envío.
+        df = pl.DataFrame({"phone": [1, 2, 3], "referencia": ["ABC", None, "XYZ"]})
+        ctx = make_ctx(content="Su referencia es {referencia}.")
+        result = await CustomMessage().execute(df, ctx)
+        assert result[Cols.message][0] == "Su referencia es ABC."
+        assert result[Cols.message][1] == "Su referencia es ."
+        assert result[Cols.message][2] == "Su referencia es XYZ."
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -675,48 +685,48 @@ class TestSpecialCharRegulation:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CharLimitRegulation
+# CharLimitRegulation — DESACTIVADA. Tests comentados por si se reactiva.
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestCharLimitRegulation:
-    _reg = SpecialCharRegulation()
-
-    def _df(self, lengths: list[int], is_special: list[bool]) -> pl.DataFrame:
-        return pl.DataFrame(
-            {
-                Cols.length:     lengths,
-                Cols.is_special: is_special,
-                Cols.is_ok:      [True] * len(lengths),
-                Cols.error_code: [None] * len(lengths),
-            },
-            schema={
-                Cols.length: pl.Int32, Cols.is_special: pl.Boolean,
-                Cols.is_ok: pl.Boolean, Cols.error_code: pl.Utf8,
-            },
-        )
-
-    def test_within_standard_limit_ok(self):
-        rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "limitCharacter": 160, "useCharacterSpecial": True})
-        ctx = make_ctx(rules=rules)
-        df = self._df([160], [False])
-        result = CharLimitRegulation().validate(df, ctx)
-        assert result[Cols.is_ok][0] is True
-
-    def test_over_standard_limit_marked(self):
-        rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "limitCharacter": 160})
-        ctx = make_ctx(rules=rules)
-        df = self._df([161], [False])
-        result = CharLimitRegulation().validate(df, ctx)
-        assert result[Cols.is_ok][0] is False
-        assert result[Cols.error_code][0] == ExclusionReason.CHAR_LIMIT_EXCEEDED
-
-    def test_special_char_uses_special_limit(self):
-        rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "limitCharacter": 160, "limitCharacterSpecial": 70})
-        ctx = make_ctx(rules=rules)
-        df = self._df([71], [True])
-        result = CharLimitRegulation().validate(df, ctx)
-        assert result[Cols.is_ok][0] is False
-        assert result[Cols.error_code][0] == ExclusionReason.CHAR_LIMIT_EXCEEDED
+# class TestCharLimitRegulation:
+#     _reg = SpecialCharRegulation()
+#
+#     def _df(self, lengths: list[int], is_special: list[bool]) -> pl.DataFrame:
+#         return pl.DataFrame(
+#             {
+#                 Cols.length:     lengths,
+#                 Cols.is_special: is_special,
+#                 Cols.is_ok:      [True] * len(lengths),
+#                 Cols.error_code: [None] * len(lengths),
+#             },
+#             schema={
+#                 Cols.length: pl.Int32, Cols.is_special: pl.Boolean,
+#                 Cols.is_ok: pl.Boolean, Cols.error_code: pl.Utf8,
+#             },
+#         )
+#
+#     def test_within_standard_limit_ok(self):
+#         rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "limitCharacter": 160, "useCharacterSpecial": True})
+#         ctx = make_ctx(rules=rules)
+#         df = self._df([160], [False])
+#         result = CharLimitRegulation().validate(df, ctx)
+#         assert result[Cols.is_ok][0] is True
+#
+#     def test_over_standard_limit_marked(self):
+#         rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "limitCharacter": 160})
+#         ctx = make_ctx(rules=rules)
+#         df = self._df([161], [False])
+#         result = CharLimitRegulation().validate(df, ctx)
+#         assert result[Cols.is_ok][0] is False
+#         assert result[Cols.error_code][0] == ExclusionReason.CHAR_LIMIT_EXCEEDED
+#
+#     def test_special_char_uses_special_limit(self):
+#         rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "limitCharacter": 160, "limitCharacterSpecial": 70})
+#         ctx = make_ctx(rules=rules)
+#         df = self._df([71], [True])
+#         result = CharLimitRegulation().validate(df, ctx)
+#         assert result[Cols.is_ok][0] is False
+#         assert result[Cols.error_code][0] == ExclusionReason.CHAR_LIMIT_EXCEEDED
 
 
 # ─────────────────────────────────────────────────────────────────────────────

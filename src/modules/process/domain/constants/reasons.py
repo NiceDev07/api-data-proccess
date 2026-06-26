@@ -15,6 +15,7 @@ class ExclusionReason:
     # Violaciones de regulación SMS
     SHORTNAME_MISSING: Final[str] = "SHORTNAME_MISSING"
     SPECIAL_CHAR_NOT_ALLOWED: Final[str] = "SPECIAL_CHAR_NOT_ALLOWED"
-    CHAR_LIMIT_EXCEEDED: Final[str] = "CHAR_LIMIT_EXCEEDED"
     # Mensaje sin URL en el sub-servicio landing
     URL_REQUIRED: Final[str] = "URL_REQUIRED"
+    # CHAR_LIMIT_EXCEEDED — desactivado: mensajes largos se cobran como multi-parte.
+    # CHAR_LIMIT_EXCEEDED: Final[str] = "CHAR_LIMIT_EXCEEDED"
