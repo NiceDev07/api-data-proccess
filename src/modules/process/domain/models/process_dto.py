@@ -50,6 +50,7 @@ class ConfigListExclusion(BaseFileConfig):
 class InfoUserValidSend(BaseModel):
     levelUser: int = Field(..., description="Nivel del usuario: `1` = pruebas (máx. 10 registros), `2+` = producción (máx. 700 000).", examples=[2])
     demographic: str = Field(..., description="Número o email del usuario para validación de nivel 1. Vacío en nivel 2+.")
+    userId: int = Field(0, description="ID del usuario que crea la campaña.")
 
 
 class ConfigLabel(BaseModel):

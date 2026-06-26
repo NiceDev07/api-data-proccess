@@ -11,6 +11,7 @@ from .sms.concat_prefix import ConcatPrefix
 from .sms.custom_message import CustomMessage
 from .sms.exclution import Exclution
 from .sms.landing import Landing
+from .sms.validate_forbidden_words import ValidateForbiddenWordsStep
 from .sms.validate_phone_length import ValidatePhoneLength
 from .sms.validate_regulations import ValidateRegulations
 

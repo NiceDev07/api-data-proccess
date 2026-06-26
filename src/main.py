@@ -3,6 +3,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 # from modules.data_processing.infrastructure.routes.preload_camp import router as preload_router
+from modules.process.infrastructure.routes.filter import router as filter_router
 from modules.process.infrastructure.routes.process import router as process_router
 from modules.process.infrastructure.routes.preview import router as preview_router
 from modules.process.infrastructure.routes.docs import (
@@ -37,6 +38,7 @@ def create_app() -> FastAPI:
     # app.include_router(preload_router, prefix=settings.prefix_app, tags=["Data Processing Service"])
     app.include_router(process_router, prefix=settings.prefix_app)
     app.include_router(preview_router, prefix=settings.prefix_app)
+    app.include_router(filter_router, prefix=settings.prefix_app)
     return app
 
 app = create_app()

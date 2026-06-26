@@ -41,6 +41,7 @@ from modules.process.infrastructure.repositories.confirm.email import EmailConfi
 from modules.process.infrastructure.repositories.numeration import NumeracionRepository
 from modules.process.infrastructure.repositories.confirm.sms import SmsConfirmRepository
 from modules.process.infrastructure.errors import build_error_detail
+from config.settings import settings
 
 
 # ── dependencias compartidas ───────────────────────────────────────────────────
@@ -61,9 +62,12 @@ def get_use_case(
     numeration_service = NumerationService(NumeracionRepository(db_portabilidad), shared.cache)
     cost_service = CostService(CostRepository(db_saem3), shared.cache)
 
+    forbidden_words_service = shared.forbidden_words_service if settings.use_new_filter else None
+
     processors = {
         ServiceType.sms: SmsProcessor(
             numeration_service, shared.exclusion_source, cost_service, shared.storage,
+            forbidden_words_service,
         ),
         ServiceType.call_blasting: CallBlastingProcessor(
             numeration_service, shared.exclusion_source, cost_service,

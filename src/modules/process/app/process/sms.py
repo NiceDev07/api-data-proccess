@@ -6,6 +6,7 @@ from modules.process.domain.models.process_dto import DataProcessingDTO
 from modules.process.app.pipelines import (
     CleanData, ConcatPrefix, AssignOperator, AssignCost, CalculateCredits,
     CalculatePDU, CustomMessage, Exclution, Landing, SaveResults, ValidateRegulations,
+    ValidateForbiddenWordsStep,
 )
 from modules.process.app.helpers import attach_identifier, build_no_valid_records_response
 from modules.process.app.normalizers.number import NumberNormalizer
@@ -39,9 +40,19 @@ _ERROR_DESCRIPTIONS: dict[str, str] = {
 
 
 class SmsProcessor(IDataProcessor):
-    def __init__(self, numeration_service, exclusion_source, cost_service, storage: IStorage):
+    def __init__(
+        self,
+        numeration_service,
+        exclusion_source,
+        cost_service,
+        storage: IStorage,
+        forbidden_words_service=None,
+    ):
         normalizer = NumberNormalizer()
-        self.steps = [
+        steps = []
+        if forbidden_words_service is not None:
+            steps.append(ValidateForbiddenWordsStep(forbidden_words_service))
+        steps += [
             CleanData(normalizer),
             Exclution(exclusion_source, normalizer),
             AssignOperator(numeration_service),
@@ -54,6 +65,7 @@ class SmsProcessor(IDataProcessor):
             CalculateCredits(),
             SaveResults(_SMS_COLS, storage, service="sms"),
         ]
+        self.steps = steps
 
     async def process(self, lf: pl.LazyFrame | pl.DataFrame, payload: DataProcessingDTO) -> Dict[str, Any]:
         # Adjuntamos el identificador antes de pasar por los pasos del pipeline
