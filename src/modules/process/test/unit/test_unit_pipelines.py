@@ -148,23 +148,53 @@ class TestCustomMessage:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestLanding:
+    @staticmethod
+    def _df(messages: list[str]) -> pl.DataFrame:
+        # Helper que arma el DataFrame con las columnas que Landing necesita.
+        return pl.DataFrame({
+            Cols.message: messages,
+            Cols.is_ok: [True] * len(messages),
+            Cols.error_code: [None] * len(messages),
+        }, schema={Cols.message: pl.Utf8, Cols.is_ok: pl.Boolean, Cols.error_code: pl.Utf8})
+
     async def test_non_landing_subservice_passthrough(self):
-        df = pl.DataFrame({Cols.message: ["Sin URL"]})
+        df = self._df(["Sin URL"])
         ctx = make_ctx(sub_service="informative", content="Sin URL")
         result = await Landing().execute(df, ctx)
         assert result.shape == df.shape
 
     async def test_landing_with_url_passthrough(self):
-        df = pl.DataFrame({Cols.message: ["Visita https://short.url ahora"]})
+        df = self._df(["Visita https://short.url ahora"])
         ctx = make_ctx(sub_service="landing", content="Visita https://short.url ahora")
         result = await Landing().execute(df, ctx)
-        assert result.shape == df.shape
+        assert result[Cols.is_ok].all()
+        assert result[Cols.error_code].is_null().all()
 
-    async def test_landing_without_url_raises(self):
-        df = pl.DataFrame({Cols.message: ["Sin enlace"]})
+    async def test_landing_without_url_marks_row_invalid(self):
+        df = self._df(["Sin enlace"])
         ctx = make_ctx(sub_service="landing", content="Sin enlace")
-        with pytest.raises(ValueError, match="URL"):
-            await Landing().execute(df, ctx)
+        result = await Landing().execute(df, ctx)
+        assert not result[Cols.is_ok].any()
+        assert result[Cols.error_code][0] == "URL_REQUIRED"
+
+    async def test_landing_url_inside_replaced_tag_passes(self):
+        # Caso real: el cliente usa {mensaje} y la URL viene del CSV ya reemplazada.
+        df = self._df(["Hola Juan, visita https://promo.co/oferta"])
+        ctx = make_ctx(sub_service="landing", content="Hola {nombre}, {mensaje}")
+        result = await Landing().execute(df, ctx)
+        assert result[Cols.is_ok].all()
+
+    async def test_landing_already_excluded_stays_excluded(self):
+        # Si la fila ya estaba marcada inválida (ej. NO_OPERATOR), no sobrescribimos.
+        df = pl.DataFrame({
+            Cols.message: ["Sin URL"],
+            Cols.is_ok: [False],
+            Cols.error_code: ["NO_OPERATOR"],
+        }, schema={Cols.message: pl.Utf8, Cols.is_ok: pl.Boolean, Cols.error_code: pl.Utf8})
+        ctx = make_ctx(sub_service="landing", content="Sin URL")
+        result = await Landing().execute(df, ctx)
+        assert not result[Cols.is_ok][0]
+        assert result[Cols.error_code][0] == "NO_OPERATOR"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -598,9 +628,10 @@ class TestShortNameRegulation:
         assert result[Cols.is_ok][0] is True
 
     def test_shortname_missing_marks_row(self):
+        # El shortname "SAEM3" no aparece en el mensaje (comparación case-insensitive).
         rules = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "useShortName": True})
-        ctx = make_ctx(shortname="EMPRESA", content="Mensaje sin empresa", rules=rules)
-        result = self._reg.validate(self._df(["Mensaje sin empresa"]), ctx)
+        ctx = make_ctx(shortname="SAEM3", content="Mensaje sin remitente", rules=rules)
+        result = self._reg.validate(self._df(["Mensaje sin remitente"]), ctx)
         assert result[Cols.is_ok][0] is False
         assert result[Cols.error_code][0] == ExclusionReason.SHORTNAME_MISSING
 

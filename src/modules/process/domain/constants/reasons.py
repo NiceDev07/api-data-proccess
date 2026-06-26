@@ -16,3 +16,5 @@ class ExclusionReason:
     SHORTNAME_MISSING: Final[str] = "SHORTNAME_MISSING"
     SPECIAL_CHAR_NOT_ALLOWED: Final[str] = "SPECIAL_CHAR_NOT_ALLOWED"
     CHAR_LIMIT_EXCEEDED: Final[str] = "CHAR_LIMIT_EXCEEDED"
+    # Mensaje sin URL en el sub-servicio landing
+    URL_REQUIRED: Final[str] = "URL_REQUIRED"

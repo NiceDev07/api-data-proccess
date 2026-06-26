@@ -305,18 +305,17 @@ def test_sms_shortname_required_only_when_rule_active():
     SmsDataProcessingDTO.model_validate(base)
 
 
-def test_sms_content_missing_shortname_rejected():
-    """Content sin shortname es rechazado cuando useShortName=True."""
-    from pydantic import ValidationError
+def test_sms_content_missing_shortname_accepted_at_dto():
+    """El DTO ya NO rechaza content sin shortname (validación delegada al pipeline
+    ShortNameRegulation, que valida sobre el mensaje real reemplazado para soportar
+    shortnames que vienen dentro de {tag} del CSV)."""
     from modules.process.domain.models.process_dto import RulesCountry
 
     rules_on = RulesCountry(**{**BASE_RULES_SMS.model_dump(), "useShortName": True})
     base = make_payload(shortname="SAEM3", content="Mensaje sin el remitente.",
                         subService="informative", rulesCountry=rules_on).model_dump()
-    with pytest.raises(ValidationError) as exc_info:
-        SmsDataProcessingDTO.model_validate(base)
-    assert any("shortname" in str(e["msg"]).lower() or "contenido" in str(e["msg"]).lower()
-               for e in exc_info.value.errors())
+    # No debe lanzar ValidationError — el shortname puede llegar vía {tag} reemplazado.
+    SmsDataProcessingDTO.model_validate(base)
 
 
 def test_sms_subservice_invalid_rejected():
