@@ -25,7 +25,6 @@ class Settings(BaseSettings):
 
     max_campaign_records: int = Field(700_000, alias="MAX_CAMPAIGN_RECORDS")
 
-    use_new_filter: bool = Field(False, alias="USE_NEW_FILTER")
     filter_cache_secret: str = Field("change-me", alias="FILTER_CACHE_SECRET")
 
     model_config = ConfigDict(
