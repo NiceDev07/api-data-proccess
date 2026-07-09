@@ -4,7 +4,9 @@ from modules.process.infrastructure.repositories.cost import ServiceKey, CBServi
 
 class CostService:
     KEY = "cost:v1"
-    TTL = 60 * 60  # 1 hora — tariffs son config estática; invalidar explícitamente si cambian
+    # 1 hora. No hay invalidación explícita implementada — un cambio de tarifa tarda
+    # hasta este TTL en propagarse (cobro a precio viejo durante la ventana).
+    TTL = 60 * 60
 
     def __init__(self, cost_repo, cache: ICache):
         self.cost_repo = cost_repo
