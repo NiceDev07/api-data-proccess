@@ -22,11 +22,14 @@ from modules.process.app.confirm.factory import ConfirmFactory
 from modules.process.app.confirm.sms import SmsConfirmStrategy
 from modules.process.app.process.callblasting import CallBlastingProcessor
 from modules.process.app.process.email import EmailProcessor
+from modules.process.app.pipelines.sms.assign_operator import AssignOperator
+from modules.process.app.pipelines.sms.assign_operator_routing import AssignOperatorRouting
 from modules.process.app.process.factory import ProcessorFactory
 from modules.process.app.process.sms import SmsProcessor
 from modules.process.app.services.cost import CostService
 from modules.process.app.services.numeration import NumerationService
 from modules.process.app.use_case.process import ProcessDataUseCase
+from modules.process.app.use_case.process_inline import ProcessSmsInlineUseCase
 from modules.process.app.use_case.send_email_test import SendEmailTestUseCase
 from modules.process.domain.enums.services import ServiceType
 from modules.process.domain.models.confirm_dto import ConfirmRequest
@@ -40,6 +43,7 @@ from modules.process.infrastructure.repositories.confirm.callblasting import Cal
 from modules.process.infrastructure.repositories.cost import CostRepository
 from modules.process.infrastructure.repositories.confirm.email import EmailConfirmRepository
 from modules.process.infrastructure.repositories.numeration import NumeracionRepository
+from modules.process.infrastructure.repositories.portability import PortabilityRepository
 from modules.process.infrastructure.repositories.confirm.sms import SmsConfirmRepository
 from modules.process.infrastructure.email.smtp_sender import SmtpEmailSender
 from modules.process.infrastructure.errors import build_error_detail
@@ -66,7 +70,7 @@ def get_use_case(
 
     processors = {
         ServiceType.sms: SmsProcessor(
-            numeration_service, shared.exclusion_source, cost_service, shared.storage,
+            AssignOperator(numeration_service), shared.exclusion_source, cost_service, shared.storage,
         ),
         ServiceType.call_blasting: CallBlastingProcessor(
             numeration_service, shared.exclusion_source, cost_service,
@@ -81,6 +85,30 @@ def get_use_case(
         file_reader_factory=shared.file_reader_factory,
         level_validator=shared.level_validator,
         processor_factory=ProcessorFactory(processors),
+    )
+
+
+# ── use case unitario (inline) ─────────────────────────────────────────────────
+
+def get_inline_use_case(
+    shared: ProcessSharedDeps = Depends(get_shared_deps),
+    db_portabilidad=Depends(get_db_portabilidad),
+    db_saem3=Depends(get_db_saem3),
+) -> ProcessSmsInlineUseCase:
+    # Mismo pipeline SMS que el masivo (validaciones, costo, PDU, créditos), pero el
+    # paso de OPERADOR se resuelve con el SP consulta_operador_pais (operador + routing +
+    # PORTABILIDAD por número) en vez de la numeración vectorizada. El unitario son
+    # pocos números → un CALL por número es aceptable, y así el MSA solo persiste.
+    cost_service = CostService(CostRepository(db_saem3), shared.cache)
+    operator_step = AssignOperatorRouting(PortabilityRepository(db_portabilidad))
+    processors = {
+        ServiceType.sms: SmsProcessor(
+            operator_step, shared.exclusion_source, cost_service, shared.storage,
+        ),
+    }
+    return ProcessSmsInlineUseCase(
+        processor_factory=ProcessorFactory(processors),
+        level_validator=shared.level_validator,
     )
 
 

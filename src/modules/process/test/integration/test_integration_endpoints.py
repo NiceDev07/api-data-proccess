@@ -32,6 +32,7 @@ from modules.process.infrastructure.routes.process import (
 )
 from modules.process.app.use_case.process import ProcessDataUseCase
 from modules.process.app.process.factory import ProcessorFactory
+from modules.process.app.pipelines.sms.assign_operator import AssignOperator
 from modules.process.app.process.sms import SmsProcessor
 from modules.process.app.process.email import EmailProcessor
 from modules.process.app.files.factory import ReaderFileFactory
@@ -212,7 +213,7 @@ def test_app(storage_dir: Path) -> FastAPI:
 
     def _make_use_case() -> ProcessDataUseCase:
         sms_processor = SmsProcessor(
-            numeration_service=_numeration_mock(),
+            operator_step=AssignOperator(_numeration_mock()),
             exclusion_source=_exclusion_mock("phone"),
             cost_service=_cost_mock(),
             storage=storage,

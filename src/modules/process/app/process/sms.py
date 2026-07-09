@@ -4,9 +4,10 @@ import polars as pl
 from modules.process.domain.interfaces.process import IDataProcessor
 from modules.process.domain.models.process_dto import DataProcessingDTO
 from modules.process.app.pipelines import (
-    CleanData, ConcatPrefix, AssignOperator, AssignCost, CalculateCredits,
+    CleanData, ConcatPrefix, AssignCost, CalculateCredits,
     CalculatePDU, CustomMessage, Exclution, Landing, SaveResults, ValidateRegulations,
 )
+from modules.process.domain.interfaces.pipeline import IPipeline
 from modules.process.app.helpers import attach_identifier, build_no_valid_records_response
 from modules.process.app.normalizers.number import NumberNormalizer
 from modules.process.app.regulations.sms import SMS_REGULATIONS
@@ -41,12 +42,19 @@ _ERROR_DESCRIPTIONS: dict[str, str] = {
 
 
 class SmsProcessor(IDataProcessor):
-    def __init__(self, numeration_service, exclusion_source, cost_service, storage: IStorage):
+    def __init__(self, operator_step: IPipeline, exclusion_source, cost_service, storage: IStorage):
         normalizer = NumberNormalizer()
+        # `operator_step` se inyecta por flujo (DIP), sin ramas condicionales:
+        # - masivo: AssignOperator → numeración vectorizada, sin portabilidad.
+        # - unitario: AssignOperatorRouting → SP consulta_operador_pais (operador +
+        #   routing + PORTABILIDAD por número). Ver process_deps.
+        # Pasos de TRANSFORMACIÓN (compartidos). El terminal (SaveResults) se separa
+        # para reutilizar el pipeline con otra salida: masivo → Parquet + resumen;
+        # unitario → filas por número (process_rows).
         self.steps = [
             CleanData(normalizer),
             Exclution(exclusion_source, normalizer),
-            AssignOperator(numeration_service),
+            operator_step,
             ConcatPrefix(),
             AssignCost(cost_service, service="sms"),
             CustomMessage(),
@@ -54,11 +62,11 @@ class SmsProcessor(IDataProcessor):
             CalculatePDU(),
             ValidateRegulations(SMS_REGULATIONS),
             CalculateCredits(),
-            SaveResults(_SMS_COLS, storage, service="sms"),
         ]
+        self.sink = SaveResults(_SMS_COLS, storage, service="sms")
 
-    async def process(self, lf: pl.LazyFrame | pl.DataFrame, payload: DataProcessingDTO) -> Dict[str, Any]:
-        # Adjuntamos el identificador antes de pasar por los pasos del pipeline
+    async def _apply_steps(self, lf: pl.LazyFrame | pl.DataFrame, payload: DataProcessingDTO) -> pl.DataFrame:
+        # Corre las transformaciones y devuelve el DataFrame por número (sin persistir).
         df = attach_identifier(
             lf if isinstance(lf, pl.LazyFrame) else lf.lazy(), payload
         ).collect(engine="streaming")
@@ -73,6 +81,16 @@ class SmsProcessor(IDataProcessor):
                 step_name = type(step).__name__
                 logger.error("SMS | error en paso %s: %s", step_name, exc)
                 raise
+        return df
+
+    async def process_rows(self, lf: pl.LazyFrame | pl.DataFrame, payload: DataProcessingDTO) -> pl.DataFrame:
+        # Flujo UNITARIO: mismo pipeline, salida por-número (sin Parquet ni resumen).
+        return await self._apply_steps(lf, payload)
+
+    async def process(self, lf: pl.LazyFrame | pl.DataFrame, payload: DataProcessingDTO) -> Dict[str, Any]:
+        # Flujo MASIVO: transforma → persiste Parquet → resumen (comportamiento idéntico).
+        df = await self._apply_steps(lf, payload)
+        df = await self.sink.execute(df, payload)
 
         summary = self._build_summary(df)
         sg = summary.summaryGeneral

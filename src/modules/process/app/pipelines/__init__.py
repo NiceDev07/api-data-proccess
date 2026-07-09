@@ -3,6 +3,7 @@
 
 from .sms.assign_cost import AssignCost
 from .sms.assign_operator import AssignOperator
+from .sms.assign_operator_routing import AssignOperatorRouting
 from .sms.assign_units import AssignUnits
 from .sms.calculate_credits import CalculateCredits
 from .sms.calculate_pdu import CalculatePDU

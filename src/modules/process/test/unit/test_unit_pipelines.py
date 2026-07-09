@@ -90,6 +90,19 @@ class TestCleanData:
         result = await self._pipe.execute(df, self._ctx)
         assert len(result) == 2
 
+    async def test_numero_con_prefijo_se_reduce_a_nacional(self):
+        # Un número que ya trae el 57 se acepta como nacional (para operador y concat).
+        df = pl.DataFrame({"phone": ["573005973563", "3208392650"]})
+        result = await self._pipe.execute(df, self._ctx)
+        assert result["phone"].to_list() == [3005973563, 3208392650]
+
+    async def test_nacional_que_empieza_en_57_no_se_toca(self):
+        # Un fijo nacional de 7 dígitos que empieza por 57 NO debe perder el prefijo.
+        df = pl.DataFrame({"phone": ["5712345", "3005973563"]})
+        result = await self._pipe.execute(df, self._ctx)
+        # 5712345 tiene 7 dígitos (< min 10) → se filtra; el móvil queda intacto
+        assert result["phone"].to_list() == [3005973563]
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ConcatPrefix

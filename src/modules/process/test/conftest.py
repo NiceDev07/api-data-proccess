@@ -183,9 +183,9 @@ def make_ctx(
 # ── mock factories ────────────────────────────────────────────────────────────
 
 def numeration_mock(
-    starts:    list[int] | None = None,
-    ends:      list[int] | None = None,
-    operators: list[str] | None = None,
+    starts:     list[int] | None = None,
+    ends:       list[int] | None = None,
+    operators:  list[str] | None = None,
 ):
     """Rangos de Colombia que cubren los números de data.csv."""
     s = np.array(starts or [3000000000, 3200000000], dtype=np.int64)
