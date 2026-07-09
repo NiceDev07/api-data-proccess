@@ -6,6 +6,7 @@ from modules.process.domain.models.process_dto import DataProcessingDTO
 from modules.process.app.pipelines import (
     CleanData, ConcatPrefix, AssignCost, CalculateCredits,
     CalculatePDU, CustomMessage, Exclution, Landing, SaveResults, ValidateRegulations,
+    ValidateForbiddenWordsStep,
 )
 from modules.process.domain.interfaces.pipeline import IPipeline
 from modules.process.app.helpers import attach_identifier, build_no_valid_records_response
@@ -42,7 +43,14 @@ _ERROR_DESCRIPTIONS: dict[str, str] = {
 
 
 class SmsProcessor(IDataProcessor):
-    def __init__(self, operator_step: IPipeline, exclusion_source, cost_service, storage: IStorage):
+    def __init__(
+        self,
+        operator_step: IPipeline,
+        exclusion_source,
+        cost_service,
+        storage: IStorage,
+        forbidden_words_service=None,
+    ):
         normalizer = NumberNormalizer()
         # `operator_step` se inyecta por flujo (DIP), sin ramas condicionales:
         # - masivo: AssignOperator → numeración vectorizada, sin portabilidad.
@@ -64,17 +72,16 @@ class SmsProcessor(IDataProcessor):
             CalculateCredits(),
         ]
         self.sink = SaveResults(_SMS_COLS, storage, service="sms")
-
-    async def _apply_steps(self, lf: pl.LazyFrame | pl.DataFrame, payload: DataProcessingDTO) -> pl.DataFrame:
-        # Corre las transformaciones y devuelve el DataFrame por número (sin persistir).
-        df = attach_identifier(
-            lf if isinstance(lf, pl.LazyFrame) else lf.lazy(), payload
-        ).collect(engine="streaming")
-        logger.info(
-            "SMS iniciado | campaña: %s | registros: %d",
-            payload.campaignId, df.height,
+        # Solo MASIVO: el unitario ya valida palabras prohibidas vía el endpoint HTTP
+        # /filtro/validar que llama el gateway antes de invocar este pipeline (ver
+        # docs/forbidden-words/README.md) — meterlo aquí también duplicaría la validación.
+        self._forbidden_words_step = (
+            ValidateForbiddenWordsStep(forbidden_words_service)
+            if forbidden_words_service is not None else None
         )
-        for step in self.steps:
+
+    async def _run_steps(self, df: pl.DataFrame, payload: DataProcessingDTO, steps: list[IPipeline]) -> pl.DataFrame:
+        for step in steps:
             try:
                 df = await step.execute(df, payload)
             except Exception as exc:
@@ -83,13 +90,28 @@ class SmsProcessor(IDataProcessor):
                 raise
         return df
 
+    async def _collect(self, lf: pl.LazyFrame | pl.DataFrame, payload: DataProcessingDTO) -> pl.DataFrame:
+        df = attach_identifier(
+            lf if isinstance(lf, pl.LazyFrame) else lf.lazy(), payload
+        ).collect(engine="streaming")
+        logger.info(
+            "SMS iniciado | campaña: %s | registros: %d",
+            payload.campaignId, df.height,
+        )
+        return df
+
     async def process_rows(self, lf: pl.LazyFrame | pl.DataFrame, payload: DataProcessingDTO) -> pl.DataFrame:
-        # Flujo UNITARIO: mismo pipeline, salida por-número (sin Parquet ni resumen).
-        return await self._apply_steps(lf, payload)
+        # Flujo UNITARIO: mismo pipeline, salida por-número (sin Parquet, sin resumen,
+        # sin paso de palabras prohibidas — ya lo validó el gateway antes de llegar aquí).
+        df = await self._collect(lf, payload)
+        return await self._run_steps(df, payload, self.steps)
 
     async def process(self, lf: pl.LazyFrame | pl.DataFrame, payload: DataProcessingDTO) -> Dict[str, Any]:
-        # Flujo MASIVO: transforma → persiste Parquet → resumen (comportamiento idéntico).
-        df = await self._apply_steps(lf, payload)
+        # Flujo MASIVO: palabras prohibidas primero, luego transforma → persiste → resumen.
+        df = await self._collect(lf, payload)
+        if self._forbidden_words_step is not None:
+            df = await self._run_steps(df, payload, [self._forbidden_words_step])
+        df = await self._run_steps(df, payload, self.steps)
         df = await self.sink.execute(df, payload)
 
         summary = self._build_summary(df)

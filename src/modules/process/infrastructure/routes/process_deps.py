@@ -71,6 +71,7 @@ def get_use_case(
     processors = {
         ServiceType.sms: SmsProcessor(
             AssignOperator(numeration_service), shared.exclusion_source, cost_service, shared.storage,
+            shared.forbidden_words_service,
         ),
         ServiceType.call_blasting: CallBlastingProcessor(
             numeration_service, shared.exclusion_source, cost_service,
