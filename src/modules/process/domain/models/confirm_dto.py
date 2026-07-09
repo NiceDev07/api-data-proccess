@@ -13,3 +13,8 @@ class ConfirmRequest(BaseModel):
         description="Identificador de grupo para localizar el Parquet. Tiene prioridad sobre campaignId.",
         examples=["KXQM7291"],
     )
+    userId: int = Field(
+        ...,
+        description="ID del usuario dueño de la campaña — se devuelve tal cual en la respuesta.",
+        examples=[12345],
+    )

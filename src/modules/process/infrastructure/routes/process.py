@@ -55,6 +55,7 @@ async def process_data(
 ):
     try:
         result = await use_case(service, payload)
+        result["userId"] = payload.infoUserValidSend.userId
         return JSONResponse(status_code=200, content=result)
     except FileNotFoundError as e:
         logger.warning("Archivo no encontrado en processing [%s] | path=%s | error=%s",
@@ -118,6 +119,7 @@ async def confirm_campaign(
     try:
         strategy = factory.get(service)
         result = await strategy.confirm(payload.campaignId, payload.codeGroup)
+        result["userId"] = payload.userId
         return JSONResponse(status_code=200, content=result)
     except FileNotFoundError as e:
         logger.warning("Archivo no encontrado en confirm [%s] | campaigns=%s | error=%s",
