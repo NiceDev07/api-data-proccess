@@ -3,6 +3,7 @@
 
 from .sms.assign_cost import AssignCost
 from .sms.assign_operator import AssignOperator
+from .sms.assign_operator_routing import AssignOperatorRouting
 from .sms.assign_units import AssignUnits
 from .sms.calculate_credits import CalculateCredits
 from .sms.calculate_pdu import CalculatePDU
@@ -11,6 +12,7 @@ from .sms.concat_prefix import ConcatPrefix
 from .sms.custom_message import CustomMessage
 from .sms.exclution import Exclution
 from .sms.landing import Landing
+from .sms.validate_forbidden_words import ValidateForbiddenWordsStep
 from .sms.validate_phone_length import ValidatePhoneLength
 from .sms.validate_regulations import ValidateRegulations
 

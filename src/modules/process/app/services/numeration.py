@@ -40,7 +40,11 @@ class NumerationService:
 
         await self.cache.set(
             key_cache,
-            {"starts": starts.tolist(), "ends": ends.tolist(), "operators": operators.tolist()},
+            {
+                "starts": starts.tolist(),
+                "ends": ends.tolist(),
+                "operators": operators.tolist(),
+            },
             self.TTL_SECONDS,
         )
 

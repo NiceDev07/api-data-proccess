@@ -4,6 +4,12 @@ class Cols:
     number_concat: Final[str] = "__number_concat__" # SAVE ->
     message: Final[str] = "__message__"
     number_operator: Final[str] = "__number_operator__"
+    # Routing resuelto por el SP consulta_operador_pais (SOLO flujo unitario): código
+    # corto, usuario API, servidor de envío e id de operador. El masivo NO los usa.
+    short_code: Final[str] = "__SHORT_CODE__"
+    user_api: Final[str] = "__USER_API__"
+    server: Final[str] = "__SERVER__"
+    operator_id: Final[str] = "__OPERATOR_ID__"
     cost_operator: Final[str] = "__cost_operator__"
     credits: Final[str] = "__CREDITS__"
     pdu: Final[str] = "__PDU__"               # SMS: Protocol Data Units

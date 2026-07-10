@@ -4,9 +4,11 @@ import polars as pl
 from modules.process.domain.interfaces.process import IDataProcessor
 from modules.process.domain.models.process_dto import DataProcessingDTO
 from modules.process.app.pipelines import (
-    CleanData, ConcatPrefix, AssignOperator, AssignCost, CalculateCredits,
+    CleanData, ConcatPrefix, AssignCost, CalculateCredits,
     CalculatePDU, CustomMessage, Exclution, Landing, SaveResults, ValidateRegulations,
+    ValidateForbiddenWordsStep,
 )
+from modules.process.domain.interfaces.pipeline import IPipeline
 from modules.process.app.helpers import attach_identifier, build_no_valid_records_response
 from modules.process.app.normalizers.number import NumberNormalizer
 from modules.process.app.regulations.sms import SMS_REGULATIONS
@@ -41,12 +43,26 @@ _ERROR_DESCRIPTIONS: dict[str, str] = {
 
 
 class SmsProcessor(IDataProcessor):
-    def __init__(self, numeration_service, exclusion_source, cost_service, storage: IStorage):
+    def __init__(
+        self,
+        operator_step: IPipeline,
+        exclusion_source,
+        cost_service,
+        storage: IStorage,
+        forbidden_words_service=None,
+    ):
         normalizer = NumberNormalizer()
+        # `operator_step` se inyecta por flujo (DIP), sin ramas condicionales:
+        # - masivo: AssignOperator → numeración vectorizada, sin portabilidad.
+        # - unitario: AssignOperatorRouting → SP consulta_operador_pais (operador +
+        #   routing + PORTABILIDAD por número). Ver process_deps.
+        # Pasos de TRANSFORMACIÓN (compartidos). El terminal (SaveResults) se separa
+        # para reutilizar el pipeline con otra salida: masivo → Parquet + resumen;
+        # unitario → filas por número (process_rows).
         self.steps = [
             CleanData(normalizer),
             Exclution(exclusion_source, normalizer),
-            AssignOperator(numeration_service),
+            operator_step,
             ConcatPrefix(),
             AssignCost(cost_service, service="sms"),
             CustomMessage(),
@@ -54,11 +70,27 @@ class SmsProcessor(IDataProcessor):
             CalculatePDU(),
             ValidateRegulations(SMS_REGULATIONS),
             CalculateCredits(),
-            SaveResults(_SMS_COLS, storage, service="sms"),
         ]
+        self.sink = SaveResults(_SMS_COLS, storage, service="sms")
+        # Solo MASIVO: el unitario ya valida palabras prohibidas vía el endpoint HTTP
+        # /filtro/validar que llama el gateway antes de invocar este pipeline (ver
+        # docs/forbidden-words/README.md) — meterlo aquí también duplicaría la validación.
+        self._forbidden_words_step = (
+            ValidateForbiddenWordsStep(forbidden_words_service)
+            if forbidden_words_service is not None else None
+        )
 
-    async def process(self, lf: pl.LazyFrame | pl.DataFrame, payload: DataProcessingDTO) -> Dict[str, Any]:
-        # Adjuntamos el identificador antes de pasar por los pasos del pipeline
+    async def _run_steps(self, df: pl.DataFrame, payload: DataProcessingDTO, steps: list[IPipeline]) -> pl.DataFrame:
+        for step in steps:
+            try:
+                df = await step.execute(df, payload)
+            except Exception as exc:
+                step_name = type(step).__name__
+                logger.error("SMS | error en paso %s: %s", step_name, exc)
+                raise
+        return df
+
+    async def _collect(self, lf: pl.LazyFrame | pl.DataFrame, payload: DataProcessingDTO) -> pl.DataFrame:
         df = attach_identifier(
             lf if isinstance(lf, pl.LazyFrame) else lf.lazy(), payload
         ).collect(engine="streaming")
@@ -66,13 +98,21 @@ class SmsProcessor(IDataProcessor):
             "SMS iniciado | campaña: %s | registros: %d",
             payload.campaignId, df.height,
         )
-        for step in self.steps:
-            try:
-                df = await step.execute(df, payload)
-            except Exception as exc:
-                step_name = type(step).__name__
-                logger.error("SMS | error en paso %s: %s", step_name, exc)
-                raise
+        return df
+
+    async def process_rows(self, lf: pl.LazyFrame | pl.DataFrame, payload: DataProcessingDTO) -> pl.DataFrame:
+        # Flujo UNITARIO: mismo pipeline, salida por-número (sin Parquet, sin resumen,
+        # sin paso de palabras prohibidas — ya lo validó el gateway antes de llegar aquí).
+        df = await self._collect(lf, payload)
+        return await self._run_steps(df, payload, self.steps)
+
+    async def process(self, lf: pl.LazyFrame | pl.DataFrame, payload: DataProcessingDTO) -> Dict[str, Any]:
+        # Flujo MASIVO: palabras prohibidas primero, luego transforma → persiste → resumen.
+        df = await self._collect(lf, payload)
+        if self._forbidden_words_step is not None:
+            df = await self._run_steps(df, payload, [self._forbidden_words_step])
+        df = await self._run_steps(df, payload, self.steps)
+        df = await self.sink.execute(df, payload)
 
         summary = self._build_summary(df)
         sg = summary.summaryGeneral

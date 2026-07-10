@@ -8,7 +8,7 @@ class ConcatPrefix(IPipeline):
     async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
         c = ctx.configFile.nameColumnDemographic
         prefix = int(ctx.rulesCountry.codeCountry)
-        digits = max(ctx.rulesCountry.numberDigitsFixed, ctx.rulesCountry.numberDigitsMobile)
+        digits = ctx.rulesCountry.national_digits
         # factor desplaza el prefijo a la izquierda para concatenarlo aritméticamente
         factor = 10 ** digits
 

@@ -2,6 +2,7 @@ import polars as pl
 from modules.process.domain.interfaces.pipeline import IPipeline
 from modules.process.domain.models.process_dto import DataProcessingDTO
 from modules.process.domain.interfaces.normalizer import INormalizer
+from modules.process.app.normalizers.number import to_national_expr
 from logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -18,11 +19,18 @@ class CleanData(IPipeline):
 
         total_antes = df.height
 
-        # Usamos el mayor entre fijo y móvil como umbral mínimo de dígitos aceptado
-        min_digits = max(ctx.rulesCountry.numberDigitsFixed, ctx.rulesCountry.numberDigitsMobile)
+        # Umbral mínimo de dígitos aceptado: criterio único compartido (national_digits)
+        min_digits = ctx.rulesCountry.national_digits
+
+        # Si el número ya trae el prefijo de país (p. ej. 573001234567), se reduce a
+        # su parte nacional para que se acepte igual que uno sin prefijo: así pasa la
+        # validación de operador (rangos nacionales) y ConcatPrefix no duplica el 57.
+        prefix = str(ctx.rulesCountry.codeCountry)
+        full_len = len(prefix) + min_digits
 
         result = (
             df.with_columns(self.normalizer.normalize(c))
+              .with_columns(to_national_expr(pl.col(c), prefix, full_len).alias(c))
               .filter(
                   pl.col(c).is_not_null() &
                   (pl.col(c).str.len_chars() >= min_digits)

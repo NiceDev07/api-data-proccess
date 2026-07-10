@@ -23,6 +23,8 @@ async def get_first_rows(
     file_path = os.path.realpath(os.path.join(folder, file))
     allowed   = os.path.realpath(base_dir)
 
+    logger.debug("Preview | file_path=%s | allowed=%s", file_path, allowed)
+
     if not file_path.startswith(allowed + os.sep) and file_path != allowed:
         logger.warning("Path traversal attempt blocked: %s", file_path)
         raise PermissionError("ACCESS_DENIED: Path is outside the authorized directory.")

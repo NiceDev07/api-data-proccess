@@ -32,6 +32,7 @@ from modules.process.infrastructure.routes.process import (
 )
 from modules.process.app.use_case.process import ProcessDataUseCase
 from modules.process.app.process.factory import ProcessorFactory
+from modules.process.app.pipelines.sms.assign_operator import AssignOperator
 from modules.process.app.process.sms import SmsProcessor
 from modules.process.app.process.email import EmailProcessor
 from modules.process.app.files.factory import ReaderFileFactory
@@ -212,7 +213,7 @@ def test_app(storage_dir: Path) -> FastAPI:
 
     def _make_use_case() -> ProcessDataUseCase:
         sms_processor = SmsProcessor(
-            numeration_service=_numeration_mock(),
+            operator_step=AssignOperator(_numeration_mock()),
             exclusion_source=_exclusion_mock("phone"),
             cost_service=_cost_mock(),
             storage=storage,
@@ -337,7 +338,7 @@ def _email_payload(csv_path: Path, n: int, campaign_id: int = 2) -> dict:
 
 def _confirm_payload(campaign_id: int, service: str = "sms") -> dict:
     prefix = "eml" if service == "email" else "sms"
-    return {"campaignId": [campaign_id], "codeGroup": f"test_{prefix}_{campaign_id:04d}"}
+    return {"campaignId": [campaign_id], "codeGroup": f"test_{prefix}_{campaign_id:04d}", "userId": 4757}
 
 
 # ---------------------------------------------------------------------------
@@ -450,7 +451,7 @@ async def test_processing_invalid_service(client: AsyncClient):
 
 @pytest.mark.anyio
 async def test_confirm_file_not_found(client: AsyncClient):
-    resp = await client.post("/v2/confirm/sms", json={"campaignId": [99999], "codeGroup": "nonexistent_grp"})
+    resp = await client.post("/v2/confirm/sms", json={"campaignId": [99999], "codeGroup": "nonexistent_grp", "userId": 4757})
     assert resp.status_code == 404
 
 

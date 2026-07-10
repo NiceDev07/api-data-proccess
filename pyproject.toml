@@ -86,6 +86,8 @@ dependencies = [
     "uvloop==0.21.0",
     "watchfiles==1.0.5",
     "websockets==15.0.1",
+    "cachetools>=5.3.0",
+    "pyahocorasick>=2.0.0",
     "xlsxwriter>=3.2.9",
     "xyzservices==2025.4.0",
     "zict==3.0.0",

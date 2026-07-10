@@ -18,7 +18,7 @@ class NumeracionRepository(INumeracionRepository):
                 select(
                     Numeracion.inicio,
                     Numeracion.fin,
-                    Numeracion.operador
+                    Numeracion.operador,
                 )
                 .where(Numeracion.id_pais == country_id)
                 .order_by(Numeracion.inicio.asc())

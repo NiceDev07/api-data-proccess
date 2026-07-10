@@ -26,8 +26,6 @@ class CostRepository:
     ) -> list[tuple[str, float, str]]:
         columns_map = {
             "sms": TelCost.sms,
-            "call_blasting_standard": TelCost.cb_standard,
-            "call_blasting_custom": TelCost.cb_custom,
             "email": TelCost.email,
         }
 

@@ -12,6 +12,7 @@ import polars as pl
 import pytest
 
 from modules.process.app.files.csv_reader import CsvReader
+from modules.process.app.pipelines.sms.assign_operator import AssignOperator
 from modules.process.app.process.sms import SmsProcessor
 from modules.process.domain.constants.cols import Cols
 from modules.process.domain.constants.reasons import ExclusionReason
@@ -80,7 +81,7 @@ async def test_sms_flow_happy_path():
     scenario = "sms_flow/happy_path"
     storage = AnalysisStorage(scenario)
     processor = SmsProcessor(
-        numeration_service=numeration_mock(),
+        operator_step=AssignOperator(numeration_mock()),
         exclusion_source=exclusion_mock(col="number"),
         cost_service=cost_mock(),
         storage=storage,
@@ -131,7 +132,7 @@ async def test_sms_flow_exclusion_list():
 
     storage = AnalysisStorage(scenario)
     processor = SmsProcessor(
-        numeration_service=numeration_mock(),
+        operator_step=AssignOperator(numeration_mock()),
         exclusion_source=exclusion_mock(numbers=[excluded_number], col="number"),
         cost_service=cost_mock(),
         storage=storage,
@@ -163,9 +164,9 @@ async def test_sms_flow_no_operator_partial():
 
     storage = AnalysisStorage(scenario)
     processor = SmsProcessor(
-        numeration_service=numeration_mock(
+        operator_step=AssignOperator(numeration_mock(
             starts=[3000000000], ends=[3099999999], operators=["CLARO"]
-        ),
+        )),
         exclusion_source=exclusion_mock(col="number"),
         cost_service=cost_mock([("57", 0.5, "COLOMBIA")]),
         storage=storage,
@@ -190,7 +191,7 @@ async def test_sms_flow_custom_message_tag():
     scenario = "sms_flow/custom_message_tag"
     storage = AnalysisStorage(scenario)
     processor = SmsProcessor(
-        numeration_service=numeration_mock(),
+        operator_step=AssignOperator(numeration_mock()),
         exclusion_source=exclusion_mock(col="number"),
         cost_service=cost_mock(),
         storage=storage,
@@ -218,7 +219,7 @@ async def test_sms_flow_custom_message_tag():
 #     from modules.process.domain.models.process_dto import RulesCountry
 #
 #     processor = SmsProcessor(
-#         numeration_service=numeration_mock(),
+#         operator_step=AssignOperator(numeration_mock()),
 #         exclusion_source=exclusion_mock(col="number"),
 #         cost_service=cost_mock(),
 #         storage=AnalysisStorage("sms_flow/char_limit_exceeded"),
@@ -241,7 +242,7 @@ async def test_sms_flow_shortname_missing_aborts_campaign():
     from modules.process.domain.models.process_dto import RulesCountry
 
     processor = SmsProcessor(
-        numeration_service=numeration_mock(),
+        operator_step=AssignOperator(numeration_mock()),
         exclusion_source=exclusion_mock(col="number"),
         cost_service=cost_mock(),
         storage=AnalysisStorage("sms_flow/shortname_missing_aborts"),
@@ -261,7 +262,7 @@ async def test_sms_flow_shortname_partial_match_aborts_campaign():
     from modules.process.domain.models.process_dto import RulesCountry
 
     processor = SmsProcessor(
-        numeration_service=numeration_mock(),
+        operator_step=AssignOperator(numeration_mock()),
         exclusion_source=exclusion_mock(col="number"),
         cost_service=cost_mock(),
         storage=AnalysisStorage("sms_flow/shortname_partial"),
@@ -287,7 +288,7 @@ async def test_sms_flow_result_parquet_saved():
     scenario = "sms_flow/result_parquet"
     storage = AnalysisStorage(scenario)
     processor = SmsProcessor(
-        numeration_service=numeration_mock(),
+        operator_step=AssignOperator(numeration_mock()),
         exclusion_source=exclusion_mock(col="number"),
         cost_service=cost_mock(),
         storage=storage,
@@ -367,7 +368,7 @@ async def test_sms_flow_all_excluded_returns_success_false():
     storage = AnalysisStorage(scenario)
     processor = SmsProcessor(
         # Rangos que no cubren ningún número del archivo → todos quedan sin operador
-        numeration_service=numeration_mock(starts=[9000000000], ends=[9099999999], operators=["NONE"]),
+        operator_step=AssignOperator(numeration_mock(starts=[9000000000], ends=[9099999999], operators=["NONE"])),
         exclusion_source=exclusion_mock(col="number"),
         cost_service=cost_mock(),
         storage=storage,
@@ -397,7 +398,7 @@ async def test_sms_flow_zero_cost_produces_zero_credits():
     scenario = "sms_flow/zero_cost"
     storage = AnalysisStorage(scenario)
     processor = SmsProcessor(
-        numeration_service=numeration_mock(),
+        operator_step=AssignOperator(numeration_mock()),
         exclusion_source=exclusion_mock(col="number"),
         cost_service=cost_mock(costs=[("57", 0.0, "COLOMBIA")]),
         storage=storage,
@@ -422,9 +423,9 @@ async def test_sms_flow_unit_value_zero_when_group_all_excluded():
     storage = AnalysisStorage(scenario)
     processor = SmsProcessor(
         # Solo CLARO cubre el primer número; el segundo queda sin operador
-        numeration_service=numeration_mock(
+        operator_step=AssignOperator(numeration_mock(
             starts=[3000000000], ends=[3009999999], operators=["CLARO"]
-        ),
+        )),
         exclusion_source=exclusion_mock(col="number"),
         cost_service=cost_mock(costs=[("57", 0.5, "COLOMBIA")]),
         storage=storage,

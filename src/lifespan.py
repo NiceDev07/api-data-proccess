@@ -109,15 +109,16 @@ async def lifespan(app: FastAPI):
                 logger.exception("Error cerrando sync engine %s tras fallo en startup", name)
         raise
 
-    process_deps = build_process_shared_deps(
-        redis_client,
-        max_records_elevated=settings.max_campaign_records,
-    )
-
     session_factories = {
         name: async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
         for name, engine in engines.items()
     }
+
+    process_deps = build_process_shared_deps(
+        redis_client,
+        masivos_sms_session_factory=session_factories["masivos_sms"],
+        max_records_elevated=settings.max_campaign_records,
+    )
 
     app.state.engines           = engines
     app.state.pg_engines        = pg_engines

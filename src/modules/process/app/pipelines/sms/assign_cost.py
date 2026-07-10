@@ -4,22 +4,32 @@ from modules.process.domain.models.process_dto import DataProcessingDTO
 from modules.process.domain.constants.cols import Cols
 from modules.process.app.services.cost import CostService
 from modules.process.infrastructure.repositories.cost import ServiceKey
+from logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class AssignCost(IPipeline):
     default_cost = 0.0
 
-    def __init__(self, cost_service: CostService, service: ServiceKey | None = None):
+    def __init__(self, cost_service: CostService, service: ServiceKey):
         self.cost_service = cost_service
         self._service = service
 
     async def execute(self, df: pl.DataFrame, ctx: DataProcessingDTO) -> pl.DataFrame:
-        service = self._service if self._service is not None else ctx.subService
         prefix_costs = await self.cost_service.get_costs(
-            ctx.rulesCountry.idCountry, ctx.tariffId, service
+            ctx.rulesCountry.idCountry, ctx.tariffId, self._service
         )
 
         if not prefix_costs:
+            # Sin tarifa configurada el batch completo sale con cost=0.0 sin rastro —
+            # el warning es la única señal de que falta configurar la tarifa (el vacío
+            # además se cachea 1h, ver CostService.TTL).
+            logger.warning(
+                "Sin tarifa de costo configurada para country_id=%s tariff_id=%s service=%s — "
+                "asignando cost=%.1f a todo el batch",
+                ctx.rulesCountry.idCountry, ctx.tariffId, self._service, self.default_cost,
+            )
             return df.with_columns(
                 pl.lit(self.default_cost).alias(Cols.cost),
                 pl.lit("").alias(Cols.cost_operator),

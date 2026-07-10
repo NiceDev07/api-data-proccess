@@ -14,6 +14,15 @@ class RulesCountry(BaseModel):
     numberDigitsFixed: int = Field(..., description="Cantidad de dígitos de un número fijo válido.", examples=[7])
     useShortName: bool = Field(..., description="Si es `true`, el campo `shortname` es obligatorio y debe estar incluido en `content`.")
 
+    @property
+    def national_digits(self) -> int:
+        """Dígitos del número nacional (el mayor entre móvil y fijo).
+
+        Criterio único de "número nacional" compartido por ConcatPrefix y
+        LevelValidator para que ambos concuerden en cómo arman/comparan el número.
+        """
+        return max(self.numberDigitsMobile, self.numberDigitsFixed)
+
 
 class BaseFileConfig(BaseModel):
     folder: str = Field(..., description="Ruta absoluta al directorio que contiene el archivo.")
@@ -49,7 +58,8 @@ class ConfigListExclusion(BaseFileConfig):
 
 class InfoUserValidSend(BaseModel):
     levelUser: int = Field(..., description="Nivel del usuario: `1` = pruebas (máx. 10 registros), `2+` = producción (máx. 700 000).", examples=[2])
-    demographic: str = Field(..., description="Número o email del usuario para validación de nivel 1. Vacío en nivel 2+.")
+    demographic: str = Field(default='', description="Número o email del usuario para validación de nivel 1. Vacío en nivel 2+ o si el emisor no lo envía (default defensivo: evita acoplar el despliegue).")
+    userId: int = Field(0, description="ID del usuario que crea la campaña.")
 
 
 class ConfigLabel(BaseModel):
@@ -78,6 +88,10 @@ class DataProcessingDTO(BaseModel):
     subService: str = Field(..., description="Sub-servicio a aplicar. Valores válidos según el servicio: SMS → `informative` | `landing`; Email → `standard`; Call Blasting → `standard` | `custom`.")
     rulesCountry: RulesCountry = Field(..., description="Reglas del país: prefijos, límites de caracteres y validación de números.")
     infoUserValidSend: InfoUserValidSend = Field(..., description="Información del nivel de usuario para validación de capacidad.")
+    # Solo flujo UNITARIO: el SP consulta_operador_pais los usa para resolver el routing.
+    # El masivo los ignora (el routing lo hace el daemon externo al enviar).
+    useFlash: bool = Field(default=False, description="SMS flash. Unitario: selecciona el código corto flash en el routing.")
+    gCode: int = Field(default=1, description="Grupo de códigos cortos para el routing (unitario).")
     subject: Optional[str] = Field(None, description="Asunto del correo. Obligatorio para el servicio `email`.")
     audioPath: Optional[str] = Field(None, description="Ruta local al archivo de audio. Requerido para `call_blasting standard`.")
     configLabels: List[ConfigLabel] = Field(

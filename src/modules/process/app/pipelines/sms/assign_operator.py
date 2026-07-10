@@ -4,13 +4,16 @@ import numpy as np
 import polars as pl
 
 from modules.process.domain.constants.cols import Cols
-from modules.process.domain.constants.reasons import ExclusionReason
 from modules.process.domain.interfaces.pipeline import IPipeline
 from modules.process.domain.models.process_dto import DataProcessingDTO
+from modules.process.app.pipelines.sms._operator_common import DEFAULT_OPERATOR, mark_no_operator
 
 
 class AssignOperator(IPipeline):
-    default_operator = "N/A"
+    """MASIVO: asigna operador por rangos de numeración (búsqueda vectorizada sobre
+    millones de filas). No consulta portabilidad — eso es del flujo unitario (SP)."""
+
+    default_operator = DEFAULT_OPERATOR
 
     def __init__(self, numeration_service):
         self.numeration_service = numeration_service
@@ -31,19 +34,8 @@ class AssignOperator(IPipeline):
 
         valid, assigned_ops = await asyncio.to_thread(_compute)
 
-        # Solo se invalida el registro si aún está OK — no se sobreescribe un error_code previo.
-        to_invalidate = ~pl.Series(valid) & pl.col(Cols.is_ok)
         # dtype=pl.String evita que Polars infiera Object cuando el array de numpy llega
         # con dtype=object (desde NumerationService) o está vacío (todos filtrados antes).
         # Object rompe la escritura a Parquet en SaveResults.
-        return df.with_columns(
-            pl.Series(Cols.number_operator, assigned_ops, dtype=pl.String),
-            pl.when(to_invalidate)
-            .then(pl.lit(False))
-            .otherwise(pl.col(Cols.is_ok))
-            .alias(Cols.is_ok),
-            pl.when(to_invalidate)
-            .then(pl.lit(ExclusionReason.NO_OPERATOR))
-            .otherwise(pl.col(Cols.error_code))
-            .alias(Cols.error_code),
-        )
+        df = df.with_columns(pl.Series(Cols.number_operator, assigned_ops, dtype=pl.String))
+        return mark_no_operator(df, pl.Series(valid))

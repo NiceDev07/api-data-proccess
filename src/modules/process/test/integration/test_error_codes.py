@@ -2,13 +2,9 @@
 Tests de error codes — valida que los errores de detalle que llegan al cliente
 estén en inglés con su código identificable y no expongan rutas internas.
 """
-import tempfile
-from pathlib import Path
-
 import polars as pl
 import pytest
 
-from modules.process.domain.constants.cols import Cols
 from modules.process.domain.models.process_dto import DataProcessingDTO, InfoUserValidSend
 from modules.process.infrastructure.validators.level_validator import LevelValidator
 
@@ -74,6 +70,54 @@ async def test_unauthorized_records_raises_with_code():
     ctx = _ctx_level(level=1, demographic="3001234567")
     with pytest.raises(ValueError, match="UNAUTHORIZED_RECORDS"):
         await validator.validate(lf, ctx)
+
+
+async def test_level1_demographic_con_prefijo_acepta_numero_nacional():
+    # El demográfico llega de BD con prefijo (573001234567) y el archivo trae el
+    # número nacional (3001234567): deben considerarse el mismo número.
+    validator = LevelValidator()
+    lf = _lf(["3001234567"])
+    ctx = _ctx_level(level=1, demographic="573001234567")
+    result = (await validator.validate(lf, ctx)).collect()
+    assert result.height == 1
+
+
+async def test_level1_archivo_con_prefijo_se_normaliza_a_nacional():
+    # Si el archivo trae el número con prefijo, valida OK y además queda en formato
+    # nacional para que ConcatPrefix (posterior) no genere un doble prefijo.
+    validator = LevelValidator()
+    lf = _lf(["573001234567"])
+    ctx = _ctx_level(level=1, demographic="573001234567")
+    result = (await validator.validate(lf, ctx)).collect()
+    assert result["phone"].to_list() == ["3001234567"]
+
+
+async def test_level1_prefijo_ambos_lados_distintos_sigue_fallando():
+    # Números realmente distintos (aun ambos con prefijo) deben seguir rechazándose.
+    validator = LevelValidator()
+    lf = _lf(["573009999999"])
+    ctx = _ctx_level(level=1, demographic="573001234567")
+    with pytest.raises(ValueError, match="UNAUTHORIZED_RECORDS"):
+        await validator.validate(lf, ctx)
+
+
+async def test_level1_numero_con_decimal_xlsx_se_normaliza():
+    # Excel entrega números como "3001234567.0"; debe compararse como nacional y pasar.
+    validator = LevelValidator()
+    lf = _lf(["3001234567.0"])
+    ctx = _ctx_level(level=1, demographic="573001234567")
+    result = (await validator.validate(lf, ctx)).collect()
+    assert result["phone"].to_list() == ["3001234567"]
+
+
+async def test_level1_email_no_se_corrompe_por_normalizacion():
+    # El demográfico de nivel 1 puede ser un email. La normalización de prefijo solo
+    # aplica a valores numéricos, así que el email debe pasar intacto y validar OK.
+    validator = LevelValidator()
+    lf = _lf(["57usuario@dom.com"])  # 12+ chars y empieza por "57": no debe recortarse
+    ctx = _ctx_level(level=1, demographic="57usuario@dom.com")
+    result = (await validator.validate(lf, ctx)).collect()
+    assert result["phone"].to_list() == ["57usuario@dom.com"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
