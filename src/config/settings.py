@@ -16,7 +16,6 @@ class Settings(BaseSettings):
 
     db_saem3:             str = Field(..., alias="DB_SAEM3")
     db_portabilidad:      str = Field(..., alias="DB_PORTABILIDAD")
-    db_masivos_sms:       str = Field(..., alias="DB_MASIVOS_SMS")
     db_telefonos_campanas: str = Field(..., alias="DB_TELEFONOS_CAMPANAS")
     db_email:             str = Field(..., alias="DB_EMAIL")
     db_callb:             str = Field(..., alias="DB_CALLB")

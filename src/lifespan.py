@@ -45,11 +45,6 @@ async def lifespan(app: FastAPI):
     engines = {
         "saem3": create_async_engine(settings.db_saem3, **_ASYNC_ENGINE_ARGS),
         "portabilidad": create_async_engine(settings.db_portabilidad, **_ASYNC_ENGINE_ARGS),
-        "masivos_sms": create_async_engine(
-            settings.db_masivos_sms,
-            connect_args={"charset": "utf8mb4"},
-            **_ASYNC_ENGINE_ARGS,
-        ),
         "telefonos_campanas": create_async_engine(
             settings.db_telefonos_campanas,
             connect_args={"charset": "utf8mb4"},
@@ -116,7 +111,7 @@ async def lifespan(app: FastAPI):
 
     process_deps = build_process_shared_deps(
         redis_client,
-        masivos_sms_session_factory=session_factories["masivos_sms"],
+        saem3_session_factory=session_factories["saem3"],
         max_records_elevated=settings.max_campaign_records,
     )
 

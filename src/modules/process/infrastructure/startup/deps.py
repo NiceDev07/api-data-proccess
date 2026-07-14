@@ -37,7 +37,7 @@ class ProcessSharedDeps:
 
 def build_process_shared_deps(
     redis_client,
-    masivos_sms_session_factory: async_sessionmaker[AsyncSession] | None = None,
+    saem3_session_factory: async_sessionmaker[AsyncSession] | None = None,
     max_records_level1: int = 10,
     max_records_elevated: int = 700_000,
 ) -> ProcessSharedDeps:
@@ -48,7 +48,9 @@ def build_process_shared_deps(
     file_reader_factory = ReaderFileFactory()
     cache = RedisCache(redis_client)
 
-    forbidden_words_repo = ForbiddenWordsRepository(masivos_sms_session_factory)
+    # filtro_sms / filtro_sms_excepciones viven en saem3 — reutiliza esa
+    # conexión en vez de un engine/pool separado solo para esto.
+    forbidden_words_repo = ForbiddenWordsRepository(saem3_session_factory)
     forbidden_words_service = ForbiddenWordsService(forbidden_words_repo, cache)
 
     return ProcessSharedDeps(
