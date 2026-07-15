@@ -14,11 +14,3 @@ class BlockedWord(BaseModel):
 class ValidateTextResponse(BaseModel):
     permitido: bool
     palabras_bloqueadas: list[BlockedWord]
-
-
-class InvalidateCacheRequest(BaseModel):
-    secret: str
-
-
-class InvalidateCacheResponse(BaseModel):
-    invalidado: bool

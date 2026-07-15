@@ -32,8 +32,6 @@ class Settings(BaseSettings):
     smtp_mail_test_password:    str = Field("", alias="SMTP_MAIL_TEST_PASSWORD")
     smtp_mail_test_domain_send: str = Field("", alias="SMTP_MAIL_TEST_DOMAIN_SEND")
 
-    filter_cache_secret: str = Field("change-me", alias="FILTER_CACHE_SECRET")
-
     model_config = ConfigDict(
         env_file=str(_ENV_FILE),
         env_file_encoding="utf-8",
