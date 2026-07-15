@@ -1,7 +1,7 @@
 """
 Tests unitarios para ForbiddenWordsService.
 
-Cubre caching L1/L2, anti-thundering herd, degradación graceful,
+Cubre caching en Redis, anti-thundering herd, degradación graceful,
 lógica de permisos por usuario y normalización de texto.
 """
 import asyncio
@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from modules.process.app.services.forbidden_words import ForbiddenWordsService, _REDIS_KEY, _LRU_KEY
+from modules.process.app.services.forbidden_words import ForbiddenWordsService, _REDIS_KEY
 
 pytestmark = pytest.mark.anyio
 
@@ -21,7 +21,6 @@ def make_cache_mock(redis_data: object = None) -> MagicMock:
     mock = MagicMock()
     mock.get = AsyncMock(return_value=redis_data)
     mock.set = AsyncMock()
-    mock.delete = AsyncMock()
     return mock
 
 
@@ -78,19 +77,8 @@ async def test_clean_text_returns_empty():
     assert hits == []
 
 
-async def test_l1_cache_hit_skips_repo():
-    """Hit en L1 (TTLCache en RAM) → repo no se llama."""
-    svc, repo, cache = make_service(repo_terms=[("palabra", set())])
-
-    await svc.validate_text("texto", user_id=1)
-    first_call_count = repo.get_active_terms.call_count
-
-    await svc.validate_text("texto", user_id=1)
-    assert repo.get_active_terms.call_count == first_call_count
-
-
-async def test_l2_redis_cache_hit_skips_repo():
-    """Hit en Redis (L2) con L1 vacío → repo no se llama."""
+async def test_redis_cache_hit_skips_repo():
+    """Hit en Redis → repo no se llama."""
     redis_payload = _redis_payload({"forbidden": set()})
     svc, repo, cache = make_service(redis_data=redis_payload)
 
@@ -99,7 +87,7 @@ async def test_l2_redis_cache_hit_skips_repo():
 
 
 async def test_full_cache_miss_calls_repo_and_saves():
-    """Miss total → repo se llama, resultado guardado en Redis y L1."""
+    """Miss en Redis → repo se llama, resultado guardado en Redis."""
     svc, repo, cache = make_service(repo_terms=[("test", set())])
 
     await svc.get_filter_data()
@@ -108,8 +96,6 @@ async def test_full_cache_miss_calls_repo_and_saves():
     cache.set.assert_called_once()
     call_args = cache.set.call_args
     assert call_args[0][0] == _REDIS_KEY
-
-    assert _LRU_KEY in svc._lru
 
 
 async def test_thundering_herd_repo_called_once():
@@ -161,6 +147,37 @@ async def test_inactive_word_not_in_automaton():
     assert all(t != "inactiva" for t, _ in hits)
 
 
+async def test_word_embedded_at_start_of_another_word_is_not_blocked():
+    """"pene" prohibido no debe bloquear "penerasta" — es una palabra distinta."""
+    svc, _, _ = make_service(repo_terms=[("pene", set())])
+    hits = await svc.validate_text("juan penerasta lopez", user_id=1)
+    assert hits == []
+
+
+async def test_word_embedded_at_end_of_another_word_is_not_blocked():
+    """"culo" prohibido no debe bloquear "vehiculo" — es una palabra distinta."""
+    svc, _, _ = make_service(repo_terms=[("culo", set())])
+    hits = await svc.validate_text("compre un vehiculo nuevo", user_id=1)
+    assert hits == []
+
+
+async def test_word_whose_final_syllables_match_a_term_is_not_blocked():
+    """Un nombre cuyas sílabas finales calzan con un término prohibido no
+    debe bloquear — ej. "Marculo Lopez" con "culo" prohibido: son palabras
+    distintas, no la palabra prohibida en sí."""
+    svc, _, _ = make_service(repo_terms=[("culo", set())])
+    hits = await svc.validate_text("Marculo Lopez", user_id=1)
+    assert hits == []
+
+
+async def test_exact_standalone_word_is_still_blocked():
+    """La palabra prohibida como palabra completa (con límites de espacio)
+    sigue bloqueando normalmente — el fix solo afecta fragmentos internos."""
+    svc, _, _ = make_service(repo_terms=[("pene", set()), ("culo", set())])
+    hits = await svc.validate_text("dibujo de un pene y un culo", user_id=1)
+    assert {t for t, _ in hits} == {"pene", "culo"}
+
+
 async def test_normalization_catches_variants():
     """Normalización atrapa variantes con mayúsculas, tildes y separadores."""
     svc, _, _ = make_service(repo_terms=[("droga", set())])
@@ -169,23 +186,9 @@ async def test_normalization_catches_variants():
     assert len(hits_upper) > 0, "Mayúsculas no detectadas"
 
     svc2, _, _ = make_service(repo_terms=[("droga", set())])
-    svc2._lru.clear()
     hits_tilde = await svc2.validate_text("dróga", user_id=1)
     assert len(hits_tilde) > 0, "Tilde no normalizada"
 
     svc3, _, _ = make_service(repo_terms=[("droga", set())])
-    svc3._lru.clear()
     hits_sep = await svc3.validate_text("dr-oga", user_id=1)
     assert len(hits_sep) > 0, "Separador no eliminado"
-
-
-async def test_invalidate_cache_clears_l1_and_redis():
-    """invalidate_cache limpia L1 y borra la clave Redis."""
-    svc, repo, cache = make_service(repo_terms=[("word", set())])
-    await svc.get_filter_data()
-    assert _LRU_KEY in svc._lru
-
-    await svc.invalidate_cache()
-
-    assert _LRU_KEY not in svc._lru
-    cache.delete.assert_called_once_with(_REDIS_KEY)

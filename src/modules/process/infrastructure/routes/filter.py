@@ -3,13 +3,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from modules.process.app.services.forbidden_words import ForbiddenWordsService
 from modules.process.domain.models.filter_dto import (
     BlockedWord,
-    InvalidateCacheRequest,
-    InvalidateCacheResponse,
     ValidateTextRequest,
     ValidateTextResponse,
 )
 from modules.process.infrastructure.errors import build_error_detail
-from config.settings import settings
 from logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -38,29 +35,6 @@ async def validate_text(
         )
     except Exception as exc:
         logger.exception("Error inesperado en /filtro/validar")
-        raise HTTPException(
-            status_code=500,
-            detail=build_error_detail(f"INTERNAL_SERVER_ERROR: {exc}"),
-        )
-
-
-@router.post(
-    "/filtro/invalidar-cache",
-    summary="Invalidar cache del filtro de palabras prohibidas",
-    response_model=InvalidateCacheResponse,
-)
-async def invalidate_cache(
-    req: InvalidateCacheRequest,
-    service: ForbiddenWordsService = Depends(_get_forbidden_words_service),
-):
-    if req.secret != settings.filter_cache_secret:
-        raise HTTPException(status_code=403, detail=build_error_detail("FORBIDDEN: Secret inválido."))
-    try:
-        await service.invalidate_cache()
-        logger.info("Cache de palabras prohibidas invalidado manualmente")
-        return InvalidateCacheResponse(invalidado=True)
-    except Exception as exc:
-        logger.exception("Error inesperado en /filtro/invalidar-cache")
         raise HTTPException(
             status_code=500,
             detail=build_error_detail(f"INTERNAL_SERVER_ERROR: {exc}"),

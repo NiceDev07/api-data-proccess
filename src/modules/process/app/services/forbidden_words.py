@@ -2,7 +2,6 @@ import asyncio
 import json
 
 import ahocorasick
-from cachetools import TTLCache
 
 from modules._common.domain.interfaces.cache import ICache
 from modules.process.domain.interfaces.forbidden_words_repository import IForbiddenWordsRepository
@@ -12,8 +11,7 @@ from logging_config import get_logger
 logger = get_logger(__name__)
 
 _REDIS_KEY = "forbidden_words:v1"
-_REDIS_TTL = 43200  # 12 horas
-_LRU_KEY = "filter_data"
+_REDIS_TTL = 1800  # 30 minutos
 
 
 def _build_automaton(terms: dict[str, set[int]]) -> ahocorasick.Automaton:
@@ -38,18 +36,32 @@ def _json_to_terms(raw: object) -> dict[str, set[int]]:
     return {entry["t"]: set(entry["users"]) for entry in raw["terms"]}
 
 
+def _is_word_boundary_match(normalized: str, start_index: int, end_index: int) -> bool:
+    """El match debe ser una palabra completa, no un fragmento dentro de otra
+    palabra distinta (ej. "pene" dentro de "penerasta", "culo" dentro de
+    "vehiculo"). El único separador que sobrevive a la normalización es el
+    espacio, así que un límite válido es el inicio/fin del texto o un espacio."""
+    left_ok = start_index == 0 or normalized[start_index - 1] == " "
+    right_ok = end_index == len(normalized) - 1 or normalized[end_index + 1] == " "
+    return left_ok and right_ok
+
+
 def _scan_text(
     automaton: ahocorasick.Automaton, text: str, user_id: int
 ) -> list[tuple[str, int]]:
     """Recorre el autómata sobre el texto normalizado y devuelve (palabra, posición)
     de cada coincidencia que el usuario NO tenga autorizada. La posición es relativa
-    al texto ya normalizado."""
+    al texto ya normalizado. Descarta coincidencias que sean solo un fragmento
+    interno de una palabra distinta (ver _is_word_boundary_match)."""
     normalized = normalize_for_filter(text)
     hits: list[tuple[str, int]] = []
     for end_index, (term, authorized_users) in automaton.iter(normalized):
+        start_index = end_index - len(term) + 1
+        if not _is_word_boundary_match(normalized, start_index, end_index):
+            continue
         if user_id in authorized_users:
             continue
-        hits.append((term, end_index - len(term) + 1))
+        hits.append((term, start_index))
     return hits
 
 
@@ -57,16 +69,9 @@ class ForbiddenWordsService:
     def __init__(self, repo: IForbiddenWordsRepository, cache: ICache):
         self._repo = repo
         self._cache = cache
-        # Un único autómata global vive en L1; basta con una entrada.
-        self._lru: TTLCache = TTLCache(maxsize=1, ttl=1200)
         self._building: dict[str, asyncio.Future] = {}
 
     async def get_filter_data(self) -> tuple[ahocorasick.Automaton, dict[str, set[int]]]:
-        cached = self._lru.get(_LRU_KEY)
-        if cached is not None:
-            logger.debug("ForbiddenWords | filtro servido desde L1 (RAM)")
-            return cached
-
         try:
             redis_raw = await self._cache.get(_REDIS_KEY)
         except Exception:
@@ -74,32 +79,27 @@ class ForbiddenWordsService:
             redis_raw = None
 
         if redis_raw is not None:
-            logger.debug("ForbiddenWords | filtro reconstruido desde Redis (L2)")
+            logger.debug("ForbiddenWords | filtro reconstruido desde Redis")
             terms = _json_to_terms(redis_raw)
-            result = (_build_automaton(terms), terms)
-            self._lru[_LRU_KEY] = result
-            return result
+            return (_build_automaton(terms), terms)
 
-        existing_future = self._building.get(_LRU_KEY)
+        existing_future = self._building.get(_REDIS_KEY)
         if existing_future is not None:
             logger.debug("ForbiddenWords | build en curso, esperando resultado (anti-thundering herd)")
             return await existing_future
 
-        logger.info("ForbiddenWords | cache miss total (L1 y L2), cargando filtro desde BD")
+        logger.info("ForbiddenWords | cache miss en Redis, cargando filtro desde BD")
         future: asyncio.Future = asyncio.get_running_loop().create_future()
-        self._building[_LRU_KEY] = future
+        self._building[_REDIS_KEY] = future
         try:
             result = await self._load_from_db()
-            # Poblamos L1 ANTES de liberar el building map: así las peticiones que
-            # lleguen justo después encuentran el dato en L1 y no rehacen el query.
-            self._lru[_LRU_KEY] = result
             future.set_result(result)
             return result
         except Exception as exc:
             future.set_exception(exc)
             raise
         finally:
-            self._building.pop(_LRU_KEY, None)
+            self._building.pop(_REDIS_KEY, None)
 
     async def _load_from_db(self) -> tuple[ahocorasick.Automaton, dict[str, set[int]]]:
         try:
@@ -120,7 +120,7 @@ class ForbiddenWordsService:
         try:
             await self._cache.set(_REDIS_KEY, json.loads(_terms_to_json(terms)), _REDIS_TTL)
         except Exception:
-            logger.warning("ForbiddenWords | fallo al escribir en Redis; L1 sigue activo")
+            logger.warning("ForbiddenWords | fallo al escribir en Redis")
         return result
 
     async def validate_text(self, text: str, user_id: int) -> list[tuple[str, int]]:
@@ -145,11 +145,3 @@ class ForbiddenWordsService:
             return None
 
         return await asyncio.to_thread(_scan)
-
-    async def invalidate_cache(self) -> None:
-        self._lru.clear()
-        try:
-            await self._cache.delete(_REDIS_KEY)
-        except Exception:
-            logger.warning("ForbiddenWords | fallo al borrar clave Redis en invalidación")
-        logger.info("ForbiddenWords | cache invalidado (L1 + Redis)")
