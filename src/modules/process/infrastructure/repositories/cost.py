@@ -40,6 +40,7 @@ class CostRepository:
             )
             .where(TelCost.country_id == country_id)
             .where(TelCost.tariff_id == tariff_id)
+            .where(columns_map[service] > 0)
         )
 
         result = await self.session.execute(stmt)
