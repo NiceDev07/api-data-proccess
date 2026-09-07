@@ -55,7 +55,7 @@ def make_payload(**overrides) -> DataProcessingDTO:
         tariffId=1,
         campaignId=[999],
         codeGroup="test_sms_0999",
-        subService="standard",
+        subService="informative",
         useExclusionList=False,
         configFile=BASE_CONFIG_FILE,
         rulesCountry=BASE_RULES_SMS,
@@ -418,16 +418,22 @@ async def test_sms_flow_zero_cost_produces_zero_credits():
 
 @pytest.mark.anyio
 async def test_sms_flow_unit_value_zero_when_group_all_excluded():
-    """unit_value=0 cuando todos los registros de un operador están excluidos (no NaN)."""
+    """unit_value=0 (no NaN) cuando todos los registros de un grupo de tarifa están excluidos.
+
+    summaryGroup agrupa por __cost_operator__ (etiqueta de la tabla de tarifa), así que
+    para tener un grupo 100 % excluido hacen falta dos prefijos de tarifa distintos:
+    - 5730… → OP_A: 3005973563, con operador → válido
+    - 5732… → OP_B: 3208392650, sin rango de numeración → NO_OPERATOR
+    """
     scenario = "sms_flow/unit_value_zero_excluded"
     storage = AnalysisStorage(scenario)
     processor = SmsProcessor(
-        # Solo CLARO cubre el primer número; el segundo queda sin operador
+        # Solo el rango 300… tiene operador; el número 320… queda NO_OPERATOR
         operator_step=AssignOperator(numeration_mock(
             starts=[3000000000], ends=[3009999999], operators=["CLARO"]
         )),
         exclusion_source=exclusion_mock(col="number"),
-        cost_service=cost_mock(costs=[("57", 0.5, "COLOMBIA")]),
+        cost_service=cost_mock(costs=[("5730", 0.5, "OP_A"), ("5732", 0.7, "OP_B")]),
         storage=storage,
     )
 
@@ -435,7 +441,14 @@ async def test_sms_flow_unit_value_zero_when_group_all_excluded():
     df = await read_df(payload)
     result = await processor.process(df, payload)
 
-    for group in result["summaryGroup"]:
-        uv = group["unit_value"]
-        assert uv is not None, f"unit_value no debe ser None en grupo {group['operator']}"
-        assert not (uv != uv), f"unit_value no debe ser NaN en grupo {group['operator']}"  # NaN check
+    groups = {g["operator"]: g for g in result["summaryGroup"]}
+    assert set(groups) == {"OP_A", "OP_B"}
+
+    assert groups["OP_A"]["total"] == 1
+    assert groups["OP_A"]["total_excluded"] == 0
+    assert groups["OP_A"]["unit_value"] == pytest.approx(0.5)
+
+    assert groups["OP_B"]["total"] == 0
+    assert groups["OP_B"]["total_excluded"] == 1
+    assert groups["OP_B"]["credits"] == 0
+    assert groups["OP_B"]["unit_value"] == 0.0  # fill_nan(0.0): 0/0 no debe propagarse como NaN

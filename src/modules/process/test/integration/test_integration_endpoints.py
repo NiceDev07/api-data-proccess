@@ -205,9 +205,15 @@ def storage_dir(tmp_path_factory) -> Path:
 
 @pytest.fixture(scope="module")
 def test_app(storage_dir: Path) -> FastAPI:
-    """Bare FastAPI app (no lifespan) with all external deps mocked."""
-    app = FastAPI()
-    app.include_router(process_router, prefix="/v2")
+    """App real (create_app) con las dependencias externas mockeadas.
+
+    El lifespan no se ejecuta bajo ASGITransport, así que no se abren
+    conexiones a MySQL/Redis. Se usa create_app() en lugar de un FastAPI()
+    pelado para que el handler de RequestValidationError (path → 400,
+    body → 422) sea el mismo que en producción.
+    """
+    from main import create_app
+    app = create_app()
 
     storage = LocalStorage(base_dir=str(storage_dir))
 
@@ -445,21 +451,26 @@ async def test_confirm_email(label: str, n: int, client: AsyncClient, storage_di
 
 @pytest.mark.anyio
 async def test_processing_invalid_service(client: AsyncClient):
+    """Servicio inexistente en el path → 400 con detail {code, message} (handler de main.py)."""
     resp = await client.post("/v2/processing/fax", json={})
-    assert resp.status_code == 422
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert set(detail) == {"code", "message"}
+    assert "sms" in detail["message"] and "email" in detail["message"]
 
 
 @pytest.mark.anyio
 async def test_confirm_file_not_found(client: AsyncClient):
     resp = await client.post("/v2/confirm/sms", json={"campaignId": [99999], "codeGroup": "nonexistent_grp", "userId": 4757})
     assert resp.status_code == 404
+    assert resp.json()["detail"]["code"] == "FILE_NOT_FOUND"
 
 
 # ---------------------------------------------------------------------------
 # /confirm/sms — REAL DATABASE (campaign 99999191)
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skip(reason="requiere BD real — ejecutar manualmente con pytest -m realdb")
+@pytest.mark.realdb
 @pytest.mark.anyio
 async def test_confirm_sms_real_db():
     """
@@ -532,7 +543,7 @@ async def test_confirm_sms_real_db():
 # /confirm/email — REAL DATABASE
 # ---------------------------------------------------------------------------
 
-@pytest.mark.skip(reason="requiere BD real — ejecutar manualmente con pytest -m realdb")
+@pytest.mark.realdb
 @pytest.mark.anyio
 async def test_confirm_email_real_db(tmp_path: Path):
     """

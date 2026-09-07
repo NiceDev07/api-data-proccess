@@ -378,23 +378,26 @@ class TestAssignCostCallBlasting:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class TestAssignCostEmail:
-    async def _run(self, cost: float) -> pl.DataFrame:
-        df = pl.DataFrame({Cols.email_domain: ["gmail.com"]})
+    """El costo de email es plano por tarifa/país: no depende del dominio."""
+
+    async def _run(self, cost: float | None) -> tuple[pl.DataFrame, MagicMock]:
+        df = pl.DataFrame({Cols.email_domain: ["gmail.com", "hotmail.com", "others"]})
         mock = MagicMock()
         mock.get_email_cost = AsyncMock(return_value=cost)
-        return await AssignCostEmail(mock).execute(df, make_ctx())
+        return await AssignCostEmail(mock).execute(df, make_ctx()), mock
 
-    async def test_domain_prefix_match(self):
-        result = await self._run(0.02)
-        assert result[Cols.cost][0] == pytest.approx(0.02)
+    async def test_flat_cost_applied_to_every_domain(self):
+        result, _ = await self._run(0.02)
+        assert result[Cols.cost].to_list() == pytest.approx([0.02, 0.02, 0.02])
 
-    async def test_catchall_empty_prefix(self):
-        result = await self._run(0.01)
-        assert result[Cols.cost][0] == pytest.approx(0.01)
+    async def test_none_cost_falls_back_to_default(self):
+        result, _ = await self._run(None)
+        assert result[Cols.cost].to_list() == [AssignCostEmail.default_cost] * 3
 
-    async def test_no_match_no_catchall_returns_default(self):
-        result = await self._run(0.0)
-        assert result[Cols.cost][0] == pytest.approx(0.0)
+    async def test_cost_service_called_with_country_and_tariff(self):
+        ctx = make_ctx()
+        _, mock = await self._run(0.02)
+        mock.get_email_cost.assert_awaited_once_with(ctx.rulesCountry.idCountry, ctx.tariffId)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

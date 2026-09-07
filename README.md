@@ -21,6 +21,8 @@ Servicio async en FastAPI que procesa archivos de datos (CSV/XLSX) para campaña
 - [Validaciones](#validaciones)
 - [Razones de exclusión](#razones-de-exclusión)
 - [Flujo de confirmación](#flujo-de-confirmación)
+- [Tests](#tests)
+- [Variables de entorno](#variables-de-entorno)
 
 ---
 
@@ -139,9 +141,9 @@ Procesa un archivo de campaña y devuelve el resumen de costos.
     "demographic": "5491112345678"         // Requerido si levelUser=1
   },
 
-  // Call Blasting standard
-  "audioDuration": 45.0,                  // Segundos del audio (alternativa: audioPath)
-  "audioPath": null
+  // Call Blasting
+  "audioPath": "/data/audio/mensaje.mp3", // standard: requerido; la duración se calcula con ffprobe
+  "configLabels": []                      // custom: etiquetas TTS opcionales {N:valor}
 }
 ```
 
@@ -151,9 +153,12 @@ Procesa un archivo de campaña y devuelve el resumen de costos.
 
 | Código | Causa |
 |--------|-------|
-| `400`  | Validación del DTO o nivel inválido |
+| `400`  | `service` inválido en el path, validación de negocio del DTO (`ValueError`) o nivel inválido |
 | `404`  | Archivo no encontrado en `configFile.folder` |
+| `422`  | Campos del body faltantes o con tipo incorrecto (`MISSING_FIELD` / `INVALID_FIELD`) |
 | `500`  | Error interno del pipeline |
+
+Todos los errores devuelven `detail: { "code": "...", "message": "..." }`.
 
 ---
 
@@ -167,20 +172,23 @@ Confirma el envío de una campaña ya procesada e inserta los datos en la base d
 
 ```jsonc
 {
-  "campaignId": [101, 102],
-  "codeGroup": "GRP_2024_ABC"   // Opcional; prioridad sobre campaignId para buscar el Parquet
+  "campaignId": [101, 102],     // Requerido, al menos un elemento
+  "codeGroup": "GRP_2024_ABC",  // Requerido; prioridad sobre campaignId para buscar el Parquet
+  "userId": 12345               // Requerido; se devuelve tal cual en la respuesta
 }
 ```
 
 **Respuesta exitosa `200`:**
 
 ```jsonc
-// SMS / Email
-{ "inserted": 48320 }
+// SMS / Email / Call Blasting
+{ "inserted": 48320, "userId": 12345 }
 
-// Call Blasting (pendiente de implementación)
-{ "confirmed": [101, 102] }
+// Parquet sin registros válidos
+{ "inserted": 0, "message": "No valid records to insert.", "userId": 12345 }
 ```
+
+> Call Blasting solo inserta los registros con `__IS_OK__ = true`; SMS y Email insertan todos con su estado `P` / `X`.
 
 ---
 
@@ -238,7 +246,7 @@ Archivo (CSV/XLSX)
                            multi-part: base - overhead (7 estándar | 3 especial)
     │
     ▼
-9.  ValidateRegulations    Aplica hasta 3 regulaciones (ver sección Validaciones)
+9.  ValidateRegulations    Aplica 2 regulaciones activas (ver sección Validaciones)
     │
     ▼
 10. CalculateCredits       créditos = PDU × costo_por_PDU
@@ -321,12 +329,12 @@ Archivo (CSV/XLSX)
     │                                                                         │
     ▼                                                                         ▼
 7s. CalculateDurationStandard                              7c. CustomMessage
-    Usa audioDuration o audioPath                              Sustituye {tags} en el script
+    Duración real del audio (audioPath, ffprobe)               Sustituye {tags} en el script
     + margen operativo de 5 segundos                          │
     │                                                         ▼
     │                                                     7c2. CalculateDurationCustom
     │                                                          Estima duración por conteo de palabras
-    │                                                          (170 palabras/min) + 5 seg de margen
+    │                                                          (170 palabras/min) + 7 seg de margen
     │                                                         │
     └────────────────────────┬────────────────────────────────┘
                              │
@@ -446,13 +454,15 @@ Archivo (CSV/XLSX)
 
 ### Regulaciones SMS
 
-Aplicadas en orden; un registro puede acumular múltiples violaciones.
+Aplicadas en orden sobre los registros aún válidos; un registro conserva solo el primer código de exclusión que recibe.
 
-| Código                      | Condición                                                            |
-|-----------------------------|----------------------------------------------------------------------|
-| `SHORTNAME_MISSING`         | `useShortName=true` y el mensaje no contiene el valor de `shortname` |
-| `SPECIAL_CHAR_NOT_ALLOWED`  | `useCharacterSpecial=false` y el mensaje tiene caracteres Unicode    |
-| `CHAR_LIMIT_EXCEEDED`       | Largo del mensaje supera `limitCharacter` (o `limitCharacterSpecial` si hay Unicode) |
+| Código                      | Condición                                                            | Efecto |
+|-----------------------------|----------------------------------------------------------------------|--------|
+| `SHORTNAME_MISSING`         | `useShortName=true` y el mensaje no contiene el valor de `shortname` | Aborta la campaña completa (`SHORTNAME_REQUIRED_IN_ALL`) |
+| `SPECIAL_CHAR_NOT_ALLOWED`  | `useCharacterSpecial=false` y el mensaje tiene caracteres Unicode    | Excluye el registro |
+| `URL_REQUIRED`              | `subService=landing` y el mensaje no contiene una URL `http(s)://`   | Aborta la campaña completa (`URL_REQUIRED_IN_ALL`) |
+
+> `CHAR_LIMIT_EXCEEDED` está **desactivada**: los mensajes largos no se rechazan, se cobran como multi-parte en `CalculatePDU`.
 
 ### Validación de teléfonos (Call Blasting)
 
@@ -476,9 +486,10 @@ Los registros excluidos quedan en el Parquet con `__IS_OK__ = false` y el códig
 | `NO_OPERATOR`               | SMS / CB        | El número no pertenece a ningún rango de operador |
 | `INVALID_NUMBER_LENGTH`     | CB              | Dígitos del teléfono no coinciden con reglas del país |
 | `INVALID_EMAIL`             | Email           | Formato de email inválido                      |
+| `NO_COST`                   | CB              | Sin tarifa configurada para el prefijo del número (SMS no excluye: costo 0) |
 | `SHORTNAME_MISSING`         | SMS             | Mensaje sin shortname requerido               |
 | `SPECIAL_CHAR_NOT_ALLOWED`  | SMS             | Caracteres Unicode en mensaje sin permiso     |
-| `CHAR_LIMIT_EXCEEDED`       | SMS             | Mensaje supera el límite de caracteres        |
+| `URL_REQUIRED`              | SMS (landing)   | Mensaje sin URL en sub-servicio landing       |
 
 ---
 
@@ -515,6 +526,136 @@ Bulk insert por campaignId (paralelo)
 ```
 
 > **Estado de registros:** `P` = Pendiente de envío (válido) | `X` = Excluido
+
+---
+
+## Tests
+
+### Ejecución
+
+```bash
+uv run pytest                                   # Suite completa (~8 s, sin BD ni Redis)
+uv run pytest src/modules/process/test/unit     # Solo unitarios de pipelines
+uv run pytest src/modules/process/test/integration/test_sms_flow.py -v
+uv run pytest -k "shortname" -v                 # Filtrar por nombre
+uv run pytest -m realdb                         # Solo los tests contra BD real (ver abajo)
+SAVE_TEST_RESULTS=1 uv run pytest               # Persistir Parquet/CSV/JSON de cada escenario
+```
+
+Configuración en `pyproject.toml` (`[tool.pytest.ini_options]`):
+
+| Opción | Valor | Efecto |
+|--------|-------|--------|
+| `pythonpath` | `["src"]` | Los tests importan `modules.process...` sin instalar el paquete |
+| `testpaths` | `["src"]` | Los scripts de benchmark `test_bulk_insert*.py` de la raíz no se recolectan |
+| `addopts` | `-m 'not realdb'` | Los tests con BD real quedan deseleccionados por defecto |
+| `markers` | `realdb` | Marcador registrado para los tests que necesitan MySQL real |
+
+Los tests son async (`pytest.mark.anyio`); el `conftest.py` fija el backend en `asyncio`.
+No requieren `.env`, MySQL ni Redis: toda la infraestructura se sustituye por mocks.
+
+### Estructura
+
+```
+src/modules/process/test/
+├── conftest.py                      Fixtures, fábricas de DTOs y mocks compartidos
+├── unit/
+│   ├── test_unit_pipelines.py           87 · un paso IPipeline por clase
+│   └── test_forbidden_words_service.py  14 · ForbiddenWordsService + normalizador
+└── integration/
+    ├── test_sms_flow.py                 13 · SmsProcessor end-to-end sobre files/data.csv
+    ├── test_sms_inline.py                5 · /processing/sms/unit (ProcessSmsInlineUseCase)
+    ├── test_email_flow.py                9 · EmailProcessor (LazyFrame)
+    ├── test_callblasting_flow.py        12 · CallBlastingProcessor standard / custom
+    ├── test_preview.py                  21 · get_first_rows + POST /first-rows
+    ├── test_send_email_test.py           7 · SendEmailTestUseCase (SMTP mockeado)
+    ├── test_error_codes.py              16 · LevelValidator, readers, códigos de error
+    ├── test_sms_confirm.py               6 · SmsConfirmRepository (MySQL, INSERT IGNORE)
+    ├── test_email_confirm.py             6 · EmailConfirmRepository (MySQL, SP create_mail_table)
+    ├── test_callblasting_confirm.py      5 · CallBlastingConfirmRepository (PostgreSQL)
+    ├── test_confirm_cleanup.py           6 · BaseConfirmStrategy: búsqueda y borrado del Parquet
+    └── test_integration_endpoints.py    16 · HTTP con httpx sobre create_app() (2 son realdb)
+
+src/modules/data_processing/application/test/
+└── test_required_columns.py              4 · módulo legacy (deshabilitado en main.py)
+```
+
+Total: **227 tests** (225 ejecutados por defecto, 2 `realdb`).
+
+### Fixtures y helpers (`conftest.py`)
+
+| Helper | Qué entrega |
+|--------|-------------|
+| `make_ctx(...)` | `DataProcessingDTO` base listo para pasar a un pipeline: `levelUser=2`, `tariffId=1`, `codeGroup="test_grp_001"`, sin lista de exclusión. Es la clase base, así que **no** ejecuta los validadores de `SmsDataProcessingDTO` / `CallBlastingDataProcessingDTO` |
+| `make_config_file()` / `make_excl_config()` | `ConfigFile` / `ConfigListExclusion` apuntando a `files/data.csv` (delimitador `;`, columna `phone`) |
+| `BASE_RULES_SMS` / `BASE_RULES_CHILE` | `RulesCountry` de Colombia (57, móvil 10 / fijo 7) y Chile (56, móvil 9 / fijo 8). Ambas con `useShortName=False` y `useCharacterSpecial=True`, es decir **regulaciones SMS desactivadas** salvo que el test las active |
+| `AnalysisStorage(scenario)` | `IStorage` que escribe Parquet real en un directorio temporal y expone `last_df()` para releer el resultado del pipeline. Con `SAVE_TEST_RESULTS=1` escribe en `resultados/test_process/<scenario>/` junto con CSV y `summary.json` |
+| `numeration_mock(starts, ends, operators)` | `NumerationService.get_ranges` → arrays NumPy ordenados. Default: CLARO `300xxxxxxx`, MOVISTAR `320xxxxxxx` |
+| `cost_mock(costs)` | `CostService.get_costs` → `[(prefijo, costo, operador_tarifa)]`. Default `("57", 0.5, "COLOMBIA")` |
+| `cb_cost_mock(rows)` | `CostService.get_costs_cb` → `[(prefijo, costo_por_minuto, operador, initial, incremental)]`. Default `("57", 60.0, "COLOMBIA", 30.0, 15.0)` |
+| `email_cost_mock(cost)` | `CostService.get_email_cost` → costo plano. Default `0.02` |
+| `exclusion_mock(numbers)` / `email_exclusion_mock(emails)` | Fuente de exclusión que devuelve un DataFrame de una columna (`phone` / `email`) |
+| `duration_mock(seconds)` | Provider de duración de audio. Default `30.0` |
+| `base_phone_df(numbers)` / `base_email_df(emails)` | DataFrames "post-CleanData" con `__IS_OK__=True` y `__ERROR_CODE__=None`, para arrancar un test en mitad de la cadena |
+
+Los mocks `cost_mock` / `cb_cost_mock` usan `costs or default`, por lo que una lista vacía cae al default: para simular "sin tarifa" hay que construir el `MagicMock` a mano (como hace `test_no_cost_match_marks_excluded`).
+
+### Qué cubre cada archivo
+
+**Unitarios de pipelines** (`test_unit_pipelines.py`): cada clase `TestXxx` instancia un solo paso y verifica su contrato con DataFrames mínimos.
+
+| Paso | Reglas verificadas |
+|------|--------------------|
+| `CleanData` | Elimina espacios, decimales de Excel, nulos y números con menos dígitos que `max(numberDigitsMobile, numberDigitsFixed)`; recorta el prefijo de país si el número lo trae |
+| `ConcatPrefix` | `codeCountry × 10^dígitos + número` para Colombia y Chile |
+| `CustomMessage` / `CustomSubject` | Sustitución de `{tags}` por columna y por fila; un valor nulo no vacía la fila; `SUBJECT_REQUIRED` si falta el asunto |
+| `Landing` | Solo actúa con `subService=landing`; sin URL en cualquier fila válida aborta la campaña |
+| `CalculatePDU` | 160 → 1 PDU, 161 → 2 (base 153 en multi-parte); Unicode 70 → 1, 71 → 2 (base 67); ASCII no se marca especial |
+| `CalculateCredits` | `créditos = PDU × costo` |
+| `AssignCost` (SMS) | Coincidencia por prefijo, gana el prefijo más largo, sin coincidencia → costo 0 y operador `""` |
+| `AssignCostCallBlasting` | Asigna costo / operador / initial / incremental; sin coincidencia → `NO_COST` |
+| `AssignCostEmail` | Costo plano para todos los dominios; `None` → `default_cost`; llamada con `(idCountry, tariffId)` |
+| `AssignOperator` | Búsqueda binaria en rangos; fuera de rango → `NO_OPERATOR`; no pisa exclusiones previas |
+| `Exclution` / `ExclutionEmail` | Lista desactivada o vacía → todo OK; coincidencia → `EXCLUSION_LIST` |
+| `CleanDataEmail` / `ValidateEmail` / `ExtractEmailDomain` | Lowercase y trim, regex de formato, dominios conocidos vs `others`, `COLUMN_NOT_FOUND` |
+| `ValidatePhoneLength` | Acepta exactamente `numberDigitsMobile` o `numberDigitsFixed`; otro largo → `INVALID_NUMBER_LENGTH` |
+| `ShortNameRegulation` / `SpecialCharRegulation` / `ValidateRegulations` | Desactivadas por `rulesCountry`; shortname ausente aborta; Unicode sin permiso excluye; orden de aplicación |
+| `CalculateDurationCustom` | `⌈palabras / 170 × 60⌉ + 7`; fallback para texto compacto (< 5 palabras y > 100 caracteres) |
+| `CalculateDurationStandard` | Usa `audioPath` vía provider; mínimo 1 segundo; misma duración en todas las filas |
+| `CalculateCreditsCallBlasting` | `ciclos = ⌈segundos / incremental⌉` si `segundos > initial`, si no `ciclos = initial`; `créditos = ciclos × incremental × costo / 60` |
+| `CalculateCreditsEmail` | `créditos = costo`, redondeo a 3 decimales |
+
+**`test_forbidden_words_service.py`**: bloqueo global vs usuarios autorizados, caché Redis (hit, miss, Redis caído, un solo acceso a BD ante concurrencia), límites de palabra (`amor` no bloquea `Marculo`), normalización de mayúsculas, tildes y separadores.
+
+**Flujos de procesamiento** (usan `files/data.csv`, 2 números colombianos):
+
+- `test_sms_flow.py`: camino feliz con conteos, PDU, créditos y `summaryGroup`; exclusión por lista y por `NO_OPERATOR`; `{tags}`; shortname all-or-nothing; validadores de `SmsDataProcessingDTO`; `NO_VALID_RECORDS`; costo 0; `unit_value = 0` cuando un grupo de tarifa queda 100 % excluido.
+- `test_sms_inline.py`: resultado por número con operador y routing; fail-closed a `NO_OPERATOR` si el SP falla o el routing está incompleto; números con prefijo; `useFlash` → `saem2`.
+- `test_email_flow.py`: `INVALID_EMAIL`, lista de exclusión, agrupación por dominio y `others`, columnas de auditoría en Parquet, todos excluidos → 0 créditos.
+- `test_callblasting_flow.py`: standard (duración del provider, créditos, Parquet sin mensaje) y custom (mensaje y segundos por registro); exclusiones; sub-servicio inválido; todos excluidos.
+- `test_preview.py`: CSV/XLSX con y sin encabezados, delimitadores, límite de 6 filas, `FILE_NOT_FOUND`, `ACCESS_DENIED` por path traversal, endpoint HTTP (200 / 404 / 422).
+- `test_send_email_test.py`: envío personalizado por fila, destinatarios inválidos reportados sin envío, `NO_VALID_RECIPIENTS`, reutilización de la última fila, fallo SMTP individual.
+
+**Confirmación y errores**:
+
+- `test_*_confirm.py`: cada repositorio llama al SP / función de creación de tabla con el id correcto, inserta en la tabla dinámica (`campana_{id}`, `mail_{id}`, `details."campaign_{id}"`) con `INSERT IGNORE` / `ON CONFLICT DO NOTHING`, y devuelve 0 sin tocar la BD con un DataFrame vacío.
+- `test_confirm_cleanup.py`: el Parquet se busca por `codeGroup` y luego por `campaignId` unidos con `-`; se elimina solo tras una confirmación exitosa; un fallo al borrar solo registra un warning.
+- `test_error_codes.py`: `MAX_RECORDS_EXCEEDED`, `DEMOGRAPHIC_REQUIRED`, `COLUMN_NOT_FOUND`, `UNAUTHORIZED_RECORDS`, normalización de nivel 1 (prefijo de país, decimales de Excel, emails intactos), `FILE_NOT_FOUND` sin exponer rutas.
+- `test_integration_endpoints.py`: `POST /processing/{sms|email}` con 2, 100 y 1 000 000 filas y `POST /confirm/{sms|email}` sobre la app real (`create_app()`) con dependencias mockeadas; servicio inválido → 400 con `{code, message}`; Parquet inexistente → 404 `FILE_NOT_FOUND`.
+
+### Tests contra base de datos real (`realdb`)
+
+`test_confirm_sms_real_db` y `test_confirm_email_real_db` insertan 1 000 000 de filas en las campañas `99999191` de `telefonos_campanas` y `mail_campaings`. Requieren `.env` con `DB_TELEFONOS_CAMPANAS` y `DB_EMAIL` apuntando a un entorno de pruebas y se ejecutan solo con `uv run pytest -m realdb`.
+
+> Estado actual: ambos están desactualizados respecto a los repositorios (`SmsConfirmRepository` ya no acepta `engine=`, `EmailConfirmRepository` necesita un `AsyncEngine`, y el POST de email omite `userId`). Fallarán hasta que se actualicen; se dejan marcados para no perder el escenario de carga.
+
+### Convenciones para nuevos tests
+
+- Nombre `test_*.py`; unitarios de un paso en `unit/`, flujos y HTTP en `integration/`.
+- Marcar con `pytestmark = pytest.mark.anyio` (o el decorador por función) y escribir `async def`.
+- Construir el contexto con `make_ctx(...)` y las dependencias con las fábricas de mocks del `conftest`; no leer de MySQL ni Redis.
+- Fijar valores exactos (`pdu == 1`, `credits == pytest.approx(0.5)`) en lugar de `> 0`: la fórmula es la regla de negocio que el test protege.
+- Un test que necesite BD real lleva `@pytest.mark.realdb` y campañas con ids que no existan en producción.
 
 ---
 

@@ -33,12 +33,14 @@ def _make_async_engine_mock():
 
 
 def _sample_df(n: int = 2) -> pl.DataFrame:
+    """Columnas tal como las entrega CallBlastingConfirmStrategy._map_columns
+    (solo registros is_ok=True; __SECONDS__/__IS_OK__/__ERROR_CODE__ ya eliminados)."""
     return pl.DataFrame({
-        "celular":   [f"300000000{i}" for i in range(n)],
-        "estado":    ["P"] * n,
-        "operador":  ["CLARO"] * n,
-        "segundos":  [30] * n,
-        "credit":    [0.5] * n,
+        "phone":          [57_300_000_0000 + i for i in range(n)],
+        "operator":       ["CLARO"] * n,
+        "text":           ["Hola"] * n,
+        "credits":        [0.5] * n,
+        "identification": [""] * n,
     })
 
 
